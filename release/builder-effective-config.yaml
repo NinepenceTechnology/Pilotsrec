@@ -1,0 +1,23 @@
+directories:
+  output: release
+  buildResources: build
+appId: mz.pilotsrecords.app
+productName: Pilot's Records
+asar: true
+files:
+  - filter:
+      - dist/**/*
+      - electron/**/*
+      - package.json
+win:
+  target:
+    - nsis
+    - portable
+mac:
+  target:
+    - dmg
+linux:
+  target:
+    - AppImage
+    - deb
+electronVersion: 37.10.3

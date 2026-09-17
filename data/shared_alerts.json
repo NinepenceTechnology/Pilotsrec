@@ -1,0 +1,28 @@
+[
+  {
+    "id": "alt-001",
+    "title": "Restrição de Vento - Entrada no Canal da Barra (Canal Macuti)",
+    "category": "meteorologico",
+    "severity": "alta",
+    "location": "Canal de Acesso Macuti / Barra da Beira",
+    "description": "Rajadas previstas acima de 25 nós entre as 14:00 e as 19:00. Manobras de navios com LOA > 250m no canal exigem 2 rebocadores ASD de escolta.",
+    "isActive": true,
+    "issuedBy": "INAMAR / Capitania do Porto da Beira",
+    "issuedAt": "2026-09-16T08:00:00.000Z",
+    "validUntil": "2026-09-17T08:00:00.000Z",
+    "actionRequired": "Verificar prontidão de rebocadores com tração estática > 60T antes do embarque na bóia P."
+  },
+  {
+    "id": "alt-002",
+    "title": "Trabalhos de Dragagem Hidrográfica no Canal",
+    "category": "canal_navegacao",
+    "severity": "media",
+    "location": "Alinhamento do Berço 2 ao Berço 5",
+    "description": "Draga autotransportadora da EMODRAGA operando no canal. Velocidade máxima autorizada no canal reduzida para 6 nós.",
+    "isActive": true,
+    "issuedBy": "CFM - Portos e Caminhos de Ferro de Moçambique",
+    "issuedAt": "2026-09-15T20:00:00.000Z",
+    "validUntil": "2026-09-18T20:00:00.000Z",
+    "actionRequired": "Estabelecer contacto de segurança em VHF Ch 12 ou 16 com o serviço de pilotagem."
+  }
+]

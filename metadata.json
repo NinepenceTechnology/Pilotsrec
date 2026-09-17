@@ -1,0 +1,6 @@
+{
+  "name": "Pilot's Records - Gestão de Pilotagem",
+  "description": "Sistema integrado de registo de movimentos, operações de manobra, escala de pilotos e relatórios de pilotagem de porto e barra.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

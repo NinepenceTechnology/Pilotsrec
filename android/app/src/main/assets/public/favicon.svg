@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="oceanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+  <!-- Background with slight rounded corners for standalone previews -->
+  <rect width="512" height="512" rx="112" fill="url(#oceanGrad)"/>
+  
+  <!-- Outer Compass Ring -->
+  <circle cx="256" cy="256" r="216" fill="none" stroke="url(#ringGrad)" stroke-width="12" stroke-dasharray="16 14" opacity="0.85"/>
+  <circle cx="256" cy="256" r="192" fill="none" stroke="#38bdf8" stroke-width="4" opacity="0.4"/>
+
+  <!-- Compass Cardinal ticks -->
+  <line x1="256" y1="48" x2="256" y2="70" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" />
+  <line x1="256" y1="442" x2="256" y2="464" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" />
+  <line x1="48" y1="256" x2="70" y2="256" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" />
+  <line x1="442" y1="256" x2="464" y2="256" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" />
+
+  <!-- Anchor Emblem -->
+  <g fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Anchor Ring -->
+    <circle cx="256" cy="136" r="36" />
+    <!-- Stock (Horizontal Bar) -->
+    <path d="M154 186h204" />
+    <circle cx="154" cy="186" r="11" fill="#ffffff" stroke="none" />
+    <circle cx="358" cy="186" r="11" fill="#ffffff" stroke="none" />
+    <!-- Shank (Vertical Shaft) -->
+    <path d="M256 172v218" />
+    <!-- Crown & Flukes (Curved Base) -->
+    <path d="M136 308c16 68 68 116 120 116s104-48 120-116" />
+    <!-- Palms / Arrow tips -->
+    <path d="M116 324l20-16 26 16" />
+    <path d="M350 324l26-16 20 16" />
+  </g>
+</svg>
