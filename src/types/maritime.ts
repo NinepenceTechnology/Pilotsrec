@@ -30,6 +30,15 @@ export interface Vessel {
   terminalPreference?: string;
   yearBuilt?: number;
   remarks?: string;
+
+  // Autoria e Controlo de Permissões
+  createdById?: string;       // ID do Piloto/Utilizador que registou
+  createdByName?: string;     // Nome do Piloto/Utilizador que registou
+  createdDeviceId?: string;   // Dispositivo onde foi criado
+  updatedById?: string;       // ID do último editor autorizado
+  updatedByName?: string;     // Nome do último editor autorizado
+  updatedDeviceId?: string;   // Dispositivo da última edição
+  updatedAt?: string;         // ISO datetime
 }
 
 // User requested exact types: ATRACAÇÃO, MUDANÇA, PUXANÇA, DESATRACAÇÃO
@@ -194,6 +203,14 @@ export interface ManeuverRecord {
   // Centro de Anexos Ampliado (Multi-anexos: fotos, bilhetes, calados, relatórios e PDFs)
   attachments?: ManeuverAttachment[];
   
+  // Autoria e Controlo de Permissões
+  createdById?: string;       // ID do Piloto/Utilizador que registou
+  createdByName?: string;     // Nome do Piloto/Utilizador que registou
+  createdDeviceId?: string;   // Identificador do dispositivo criador
+  updatedById?: string;       // ID do último utilizador autorizado a editar
+  updatedByName?: string;     // Nome do último editor
+  updatedDeviceId?: string;   // Dispositivo onde foi feita a última edição
+
   createdAt: string;
   updatedAt: string;
 }
@@ -290,5 +307,13 @@ export interface MaritimeAlert {
   validUntil?: string; // ISO datetime or date
   actionRequired?: string;
   syncDeviceId?: string;
+
+  // Autoria e Controlo de Permissões
+  createdById?: string;       // ID do Piloto/Utilizador que registou
+  createdByName?: string;     // Nome do Piloto/Utilizador que registou
+  createdDeviceId?: string;   // Identificador do dispositivo criador
+  updatedById?: string;       // ID do último utilizador autorizado a editar
+  updatedByName?: string;     // Nome do último editor
+  updatedDeviceId?: string;   // Dispositivo onde foi feita a última edição
 }
 
