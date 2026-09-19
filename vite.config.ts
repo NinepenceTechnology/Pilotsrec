@@ -270,6 +270,7 @@ function vesselFinderPlugin(): Plugin {
 function sharedSyncPlugin(): Plugin {
   const dataDir = path.resolve(__dirname, 'data');
   const alertsFile = path.resolve(dataDir, 'shared_alerts.json');
+  const deletedAlertsFile = path.resolve(dataDir, 'shared_deleted_alert_ids.json');
   const maneuversFile = path.resolve(dataDir, 'shared_maneuvers.json');
   const vesselsFile = path.resolve(dataDir, 'shared_vessels.json');
   const pilotsFile = path.resolve(dataDir, 'shared_pilots.json');
@@ -284,6 +285,9 @@ function sharedSyncPlugin(): Plugin {
     }
     if (!fs.existsSync(alertsFile)) {
       fs.writeFileSync(alertsFile, '[]', 'utf8');
+    }
+    if (!fs.existsSync(deletedAlertsFile)) {
+      fs.writeFileSync(deletedAlertsFile, '[]', 'utf8');
     }
     if (!fs.existsSync(maneuversFile)) {
       fs.writeFileSync(maneuversFile, '[]', 'utf8');
@@ -512,7 +516,8 @@ function sharedSyncPlugin(): Plugin {
 
         if (req.method === 'GET') {
           const maneuvers = readJson(maneuversFile, []);
-          const alerts = readJson(alertsFile, []);
+          const deletedAlertIds = readJson(deletedAlertsFile, []);
+          const alerts = readJson(alertsFile, []).filter((a: any) => !deletedAlertIds.includes(a.id));
           const vessels = readJson(vesselsFile, []);
           const pilots = readJson(pilotsFile, []);
           const meta = readJson(metaFile, {});
@@ -523,7 +528,8 @@ function sharedSyncPlugin(): Plugin {
               maneuvers,
               alerts,
               vessels,
-              pilots
+              pilots,
+              deletedAlertIds
             },
             stats: {
               totalManeuvers: maneuvers.length,
@@ -543,6 +549,12 @@ function sharedSyncPlugin(): Plugin {
           const incomingAlerts = Array.isArray(body.alerts) ? body.alerts : (body.alert ? [body.alert] : []);
           const incomingVessels = Array.isArray(body.vessels) ? body.vessels : (body.vessel ? [body.vessel] : []);
           const incomingPilots = Array.isArray(body.pilots) ? body.pilots : (body.pilot ? [body.pilot] : []);
+          const incomingDeletedAlertIds = Array.isArray(body.deletedAlertIds) ? body.deletedAlertIds : [];
+
+          // Manage deleted alerts persistent tombstone list
+          const currentDeletedAlertIds: string[] = readJson(deletedAlertsFile, []);
+          const mergedDeletedAlertIds = Array.from(new Set([...currentDeletedAlertIds, ...incomingDeletedAlertIds]));
+          writeJson(deletedAlertsFile, mergedDeletedAlertIds);
 
           const currentManeuvers = readJson(maneuversFile, []);
           const currentAlerts = readJson(alertsFile, []);
@@ -554,13 +566,25 @@ function sharedSyncPlugin(): Plugin {
           const mergedVessels = mergeVesselRecords(currentVessels, incomingVessels);
           const mergedPilots = mergePilotRecords(currentPilots, incomingPilots);
 
-          // Merge alerts additively
+          // Merge alerts with strict respect for edits (updatedAt) and deletions (deletedAlertIds)
           const alertMap = new Map();
-          currentAlerts.forEach((a: any) => alertMap.set(a.id, a));
+          currentAlerts.forEach((a: any) => {
+            if (a && a.id && !mergedDeletedAlertIds.includes(a.id)) {
+              alertMap.set(a.id, a);
+            }
+          });
           incomingAlerts.forEach((a: any) => {
-            if (a && a.id) {
+            if (a && a.id && !mergedDeletedAlertIds.includes(a.id)) {
               const existing = alertMap.get(a.id);
-              alertMap.set(a.id, existing ? { ...existing, ...a } : a);
+              if (!existing) {
+                alertMap.set(a.id, a);
+              } else {
+                const timeExisting = new Date(existing.updatedAt || existing.issuedAt || 0).getTime();
+                const timeIncoming = new Date(a.updatedAt || a.issuedAt || 0).getTime();
+                if (timeIncoming >= timeExisting) {
+                  alertMap.set(a.id, { ...existing, ...a });
+                }
+              }
             }
           });
           const mergedAlerts = Array.from(alertMap.values()).sort((a: any, b: any) => 
@@ -588,6 +612,7 @@ function sharedSyncPlugin(): Plugin {
             alerts: mergedAlerts,
             vessels: mergedVessels,
             pilots: mergedPilots,
+            deletedAlertIds: mergedDeletedAlertIds,
             sender: body.pilotName || 'device',
             timestamp: Date.now()
           });
@@ -599,7 +624,8 @@ function sharedSyncPlugin(): Plugin {
               maneuvers: mergedManeuvers,
               alerts: mergedAlerts,
               vessels: mergedVessels,
-              pilots: mergedPilots
+              pilots: mergedPilots,
+              deletedAlertIds: mergedDeletedAlertIds
             },
             stats: {
               totalManeuvers: mergedManeuvers.length,
@@ -619,10 +645,12 @@ function sharedSyncPlugin(): Plugin {
         res.setHeader('Content-Type', 'application/json');
 
         if (req.method === 'GET') {
-          const alertsList = readJson(alertsFile, []);
+          const deletedAlertIds: string[] = readJson(deletedAlertsFile, []);
+          const alertsList = readJson(alertsFile, []).filter((a: any) => !deletedAlertIds.includes(a.id));
           res.end(JSON.stringify({ 
             success: true, 
             alerts: alertsList,
+            deletedAlertIds,
             activeDeviceCount: Math.max(1, sseClients.length),
             timestamp: Date.now() 
           }));
@@ -632,9 +660,14 @@ function sharedSyncPlugin(): Plugin {
         if (req.method === 'POST' || req.method === 'PUT') {
           const body = await parseBody(req);
           let current = readJson(alertsFile, []);
+          let deletedAlertIds: string[] = readJson(deletedAlertsFile, []);
           const nowIso = new Date().toISOString();
 
-          if (body.alert) {
+          if (body.alert && body.alert.id) {
+            // If alert is created/updated, ensure it's not marked as deleted
+            deletedAlertIds = deletedAlertIds.filter(id => id !== body.alert.id);
+            writeJson(deletedAlertsFile, deletedAlertIds);
+
             const incoming = { 
               ...body.alert, 
               updatedAt: body.alert.updatedAt || nowIso 
@@ -647,9 +680,11 @@ function sharedSyncPlugin(): Plugin {
             }
           } else if (Array.isArray(body.alerts)) {
             const map = new Map<string, any>();
-            current.forEach((a: any) => map.set(a.id, a));
+            current.forEach((a: any) => {
+              if (!deletedAlertIds.includes(a.id)) map.set(a.id, a);
+            });
             body.alerts.forEach((a: any) => {
-              if (a && a.id) {
+              if (a && a.id && !deletedAlertIds.includes(a.id)) {
                 map.set(a.id, { ...a, updatedAt: a.updatedAt || nowIso });
               }
             });
@@ -670,26 +705,43 @@ function sharedSyncPlugin(): Plugin {
           res.end(JSON.stringify({ 
             success: true, 
             alerts: current,
-            message: 'Alerta sincronizado com todos os dispositivos' 
+            deletedAlertIds,
+            message: 'Alerta sincronizado e atualizado com todos os dispositivos' 
           }));
           return;
         }
 
         if (req.method === 'DELETE') {
-          const id = parsedUrl.searchParams.get('id');
+          const urlId = parsedUrl.searchParams.get('id');
+          let id = urlId;
+          if (!id) {
+            try {
+              const body = await parseBody(req);
+              id = body.id;
+            } catch {}
+          }
+
           let current = readJson(alertsFile, []);
+          let deletedAlertIds: string[] = readJson(deletedAlertsFile, []);
+
           if (id) {
             current = current.filter((a: any) => a.id !== id);
             writeJson(alertsFile, current);
+
+            if (!deletedAlertIds.includes(id)) {
+              deletedAlertIds.push(id);
+              writeJson(deletedAlertsFile, deletedAlertIds);
+            }
 
             notifyAllSseClients('ALERT_SYNC', {
               alerts: current,
               action: 'DELETE',
               deletedId: id,
+              deletedAlertIds,
               timestamp: Date.now()
             });
           }
-          res.end(JSON.stringify({ success: true, alerts: current }));
+          res.end(JSON.stringify({ success: true, alerts: current, deletedAlertIds }));
           return;
         }
       }

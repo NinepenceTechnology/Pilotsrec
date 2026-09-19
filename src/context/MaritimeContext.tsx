@@ -136,6 +136,7 @@ const STORAGE_KEYS = {
   SHIFTS: 'pilots_records_shifts_v2',
   WEATHER: 'pilots_records_weather_v2',
   ALERTS: 'pilots_records_alerts_v2',
+  DELETED_ALERTS: 'pilots_records_deleted_alerts_v2',
   USER_PROFILE: 'pilots_records_user_profile_v2',
   UNIFIED_BACKUP: 'pilots_records_unified_offline_backup_v2',
   LAST_UNIFIED_SYNC: 'pilots_records_last_unified_sync_time'
@@ -149,25 +150,39 @@ export const normalizePilotKey = (name: string): string => {
 };
 
 // Global Data Merging Helpers across users and pilots
-export const mergeAlerts = (listA: MaritimeAlert[], listB: MaritimeAlert[]): MaritimeAlert[] => {
+export const mergeAlerts = (listA: MaritimeAlert[], listB: MaritimeAlert[], deletedIds?: string[] | Set<string>): MaritimeAlert[] => {
+  const isDeleted = (id: string) => {
+    if (!deletedIds) return false;
+    if (deletedIds instanceof Set) return deletedIds.has(id);
+    return deletedIds.includes(id);
+  };
+
   const map = new Map<string, MaritimeAlert>();
-  (listA || []).forEach(a => { if (a && a.id) map.set(a.id, a); });
+  (listA || []).forEach(a => { 
+    if (a && a.id && !isDeleted(a.id)) {
+      map.set(a.id, a); 
+    }
+  });
+
   (listB || []).forEach(b => {
-    if (!b || !b.id) return;
+    if (!b || !b.id || isDeleted(b.id)) return;
     const existing = map.get(b.id);
     if (!existing) {
       map.set(b.id, b);
     } else {
-      const timeA = new Date(existing.issuedAt || 0).getTime();
-      const timeB = new Date(b.issuedAt || 0).getTime();
+      const timeA = new Date(existing.updatedAt || existing.issuedAt || 0).getTime();
+      const timeB = new Date(b.updatedAt || b.issuedAt || 0).getTime();
       if (timeB >= timeA) {
         map.set(b.id, { ...existing, ...b });
       }
     }
   });
-  return Array.from(map.values()).sort((a, b) => 
-    new Date(b.issuedAt || 0).getTime() - new Date(a.issuedAt || 0).getTime()
-  );
+
+  return Array.from(map.values())
+    .filter(a => !isDeleted(a.id))
+    .sort((a, b) => 
+      new Date(b.updatedAt || b.issuedAt || 0).getTime() - new Date(a.updatedAt || a.issuedAt || 0).getTime()
+    );
 };
 
 export const mergeManeuvers = (listA: ManeuverRecord[], listB: ManeuverRecord[]): ManeuverRecord[] => {
@@ -415,10 +430,22 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   });
 
+  const [deletedAlertIds, setDeletedAlertIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.DELETED_ALERTS);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [alerts, setAlerts] = useState<MaritimeAlert[]>(() => {
     try {
+      const savedDel = localStorage.getItem(STORAGE_KEYS.DELETED_ALERTS);
+      const delList: string[] = savedDel ? JSON.parse(savedDel) : [];
       const saved = localStorage.getItem(STORAGE_KEYS.ALERTS);
-      return saved ? JSON.parse(saved) : INITIAL_ALERTS;
+      const raw: MaritimeAlert[] = saved ? JSON.parse(saved) : INITIAL_ALERTS;
+      return raw.filter(a => a && a.id && !delList.includes(a.id));
     } catch {
       return INITIAL_ALERTS;
     }
@@ -568,7 +595,8 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         maneuvers,
         alerts,
         vessels,
-        pilots
+        pilots,
+        deletedAlertIds
       } : null;
 
       const res = await fetch('/api/shared/sync-unified', {
@@ -584,6 +612,13 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const data = await res.json();
 
       if (data.success && data.database) {
+        let activeDeleted = deletedAlertIds;
+        if (Array.isArray(data.database.deletedAlertIds)) {
+          activeDeleted = Array.from(new Set([...deletedAlertIds, ...data.database.deletedAlertIds]));
+          setDeletedAlertIds(activeDeleted);
+          try { localStorage.setItem(STORAGE_KEYS.DELETED_ALERTS, JSON.stringify(activeDeleted)); } catch {}
+        }
+
         if (Array.isArray(data.database.maneuvers) && data.database.maneuvers.length > 0) {
           setManeuvers(prev => {
             const merged = mergeManeuvers(prev, data.database.maneuvers);
@@ -593,7 +628,7 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
         if (Array.isArray(data.database.alerts)) {
           setAlerts(prev => {
-            const merged = mergeAlerts(prev, data.database.alerts);
+            const merged = mergeAlerts(prev, data.database.alerts, activeDeleted);
             try { localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(merged)); } catch {}
             return merged;
           });
@@ -685,14 +720,21 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!res.ok) return;
       const data = await res.json();
       if (data.success && Array.isArray(data.alerts)) {
-        setAlerts(data.alerts);
+        let activeDeleted = deletedAlertIds;
+        if (Array.isArray(data.deletedAlertIds)) {
+          activeDeleted = Array.from(new Set([...deletedAlertIds, ...data.deletedAlertIds]));
+          setDeletedAlertIds(activeDeleted);
+          try { localStorage.setItem(STORAGE_KEYS.DELETED_ALERTS, JSON.stringify(activeDeleted)); } catch {}
+        }
+        setAlerts(prev => {
+          const merged = mergeAlerts(prev, data.alerts, activeDeleted);
+          try { localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(merged)); } catch {}
+          return merged;
+        });
         if (data.activeDeviceCount) {
           setActiveSyncDevices(data.activeDeviceCount);
         }
         setLastSyncTime(new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-        try {
-          localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(data.alerts));
-        } catch {}
       }
     } catch (e) {
       console.warn('Falha na sincronização de alertas com servidor:', e);
@@ -749,13 +791,20 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               setIsRealtimeConnected(true);
               if (data.clientCount) setActiveSyncDevices(data.clientCount);
               if (Array.isArray(data.alerts)) {
-                setAlerts(data.alerts);
-                try {
-                  localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(data.alerts));
-                } catch {}
+                setAlerts(prev => {
+                  const merged = mergeAlerts(prev, data.alerts, deletedAlertIds);
+                  try { localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(merged)); } catch {}
+                  return merged;
+                });
                 setLastSyncTime(new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
               }
             } else if (data.type === 'UNIFIED_SYNC' && data.payload) {
+              let activeDeleted = deletedAlertIds;
+              if (Array.isArray(data.payload.deletedAlertIds)) {
+                activeDeleted = Array.from(new Set([...deletedAlertIds, ...data.payload.deletedAlertIds]));
+                setDeletedAlertIds(activeDeleted);
+                try { localStorage.setItem(STORAGE_KEYS.DELETED_ALERTS, JSON.stringify(activeDeleted)); } catch {}
+              }
               // Master unified database broadcast from another user or device
               if (Array.isArray(data.payload.maneuvers)) {
                 setManeuvers(prev => {
@@ -766,7 +815,7 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }
               if (Array.isArray(data.payload.alerts)) {
                 setAlerts(prev => {
-                  const a = mergeAlerts(prev, data.payload.alerts);
+                  const a = mergeAlerts(prev, data.payload.alerts, activeDeleted);
                   try { localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(a)); } catch {}
                   return a;
                 });
@@ -793,11 +842,24 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }));
               playAlertAudioChime();
             } else if (data.type === 'ALERT_SYNC' && data.payload) {
-              if (Array.isArray(data.payload.alerts)) {
-                setAlerts(data.payload.alerts);
-                try {
-                  localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(data.payload.alerts));
-                } catch {}
+              if (data.payload.action === 'DELETE' && data.payload.deletedId) {
+                const delId = data.payload.deletedId;
+                setDeletedAlertIds(prev => {
+                  const next = Array.from(new Set([...prev, delId]));
+                  try { localStorage.setItem(STORAGE_KEYS.DELETED_ALERTS, JSON.stringify(next)); } catch {}
+                  return next;
+                });
+                setAlerts(prev => {
+                  const next = prev.filter(a => a.id !== delId);
+                  try { localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(next)); } catch {}
+                  return next;
+                });
+              } else if (Array.isArray(data.payload.alerts)) {
+                setAlerts(prev => {
+                  const merged = mergeAlerts(prev, data.payload.alerts, deletedAlertIds);
+                  try { localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(merged)); } catch {}
+                  return merged;
+                });
                 setLastSyncTime(new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
                 if (data.payload.action === 'UPSERT') {
                   playAlertAudioChime();
@@ -898,13 +960,21 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             return next;
           });
         } else if (type === 'ALERT_DELETE' && payload) {
-          setAlerts(prev => {
-            const next = prev.filter(a => a.id !== payload);
-            try {
-              localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(next));
-            } catch {}
-            return next;
-          });
+          const targetId = typeof payload === 'string' ? payload : payload?.id;
+          if (targetId) {
+            setDeletedAlertIds(prev => {
+              const next = Array.from(new Set([...prev, targetId]));
+              try { localStorage.setItem(STORAGE_KEYS.DELETED_ALERTS, JSON.stringify(next)); } catch {}
+              return next;
+            });
+            setAlerts(prev => {
+              const next = prev.filter(a => a.id !== targetId);
+              try {
+                localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(next));
+              } catch {}
+              return next;
+            });
+          }
         } else if (type === 'MANEUVER_UPSERT' && payload) {
           setManeuvers(prev => mergeManeuvers(prev, [payload]));
         } else if (type === 'SYNC_ALL') {
@@ -1577,6 +1647,12 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       issuedAt: nowIso,
       updatedAt: nowIso
     };
+
+    setDeletedAlertIds(prev => {
+      const next = prev.filter(delId => delId !== id);
+      try { localStorage.setItem(STORAGE_KEYS.DELETED_ALERTS, JSON.stringify(next)); } catch {}
+      return next;
+    });
     
     setAlerts(prev => {
       const updated = [newAlert, ...prev.filter(a => a.id !== id)];
@@ -1610,6 +1686,13 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateAlert = (id: string, updates: Partial<MaritimeAlert>) => {
     let updatedItem: MaritimeAlert | null = null;
     const nowIso = new Date().toISOString();
+
+    setDeletedAlertIds(prev => {
+      const next = prev.filter(delId => delId !== id);
+      try { localStorage.setItem(STORAGE_KEYS.DELETED_ALERTS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
     setAlerts(prev => {
       const next = prev.map(a => {
         if (a.id === id) {
@@ -1664,6 +1747,12 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteAlert = (id: string) => {
+    setDeletedAlertIds(prev => {
+      const next = Array.from(new Set([...prev, id]));
+      try { localStorage.setItem(STORAGE_KEYS.DELETED_ALERTS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
     setAlerts(prev => {
       const next = prev.filter(a => a.id !== id);
       try {
@@ -1672,7 +1761,7 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return next;
     });
 
-    broadcastSharedEvent('ALERT_DELETE', id);
+    broadcastSharedEvent('ALERT_DELETE', { id });
     fetch(`/api/shared/alerts?id=${encodeURIComponent(id)}`, {
       method: 'DELETE',
       keepalive: true

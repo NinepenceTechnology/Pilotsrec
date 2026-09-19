@@ -254,6 +254,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewManeuverModal }) => {
 
           {/* Mobile Right Actions: New maneuver button on small screens */}
           <div className="flex items-center gap-1.5 md:hidden">
+            <PWAInstallButton className="text-[11px] px-2 py-1" />
             <button
               onClick={() => setIsMobileHudOpen(true)}
               className="p-2 rounded-lg bg-slate-900 text-cyan-400 border border-cyan-800"
