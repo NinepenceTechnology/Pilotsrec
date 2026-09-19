@@ -20,7 +20,12 @@ import {
   Bell,
   FileSpreadsheet,
   FolderArchive,
-  LayoutDashboard
+  LayoutDashboard,
+  Database,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  DownloadCloud
 } from 'lucide-react';
 import { useMaritime, AppView } from '../context/MaritimeContext';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -43,7 +48,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewManeuverModal }) => {
     setIsProfileModalOpen,
     language,
     setLanguage,
-    t
+    t,
+    isOnline,
+    isRealtimeConnected,
+    activeSyncDevices,
+    lastSyncTime,
+    isUnifiedSyncing,
+    unifiedSyncStats,
+    syncUnifiedDatabaseNow,
+    exportUnifiedDatabaseBackup
   } = useMaritime();
 
   const [isManagementDropdownOpen, setIsManagementDropdownOpen] = useState(false);
@@ -151,6 +164,68 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewManeuverModal }) => {
             className="text-slate-400 hover:text-white transition-colors p-1"
           >
             <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Unified Database Multi-Device Sync & Offline Backup Bar */}
+      <div className="bg-slate-900 text-white px-3 sm:px-6 py-1 text-[11px] font-mono flex items-center justify-between flex-wrap gap-2 border-b border-slate-800">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isOnline ? (
+            <span className="flex items-center gap-1.5 text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <Database className="w-3 h-3" />
+              <span className="font-bold">
+                {isPt ? 'Base de Dados Única Sincronizada' : 'Unified Database Synced'}
+              </span>
+              <span className="text-slate-300 font-normal">
+                ({activeSyncDevices} {activeSyncDevices === 1 ? (isPt ? 'dispositivo ativo' : 'active device') : (isPt ? 'dispositivos' : 'devices')})
+              </span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/60">
+              <WifiOff className="w-3 h-3 text-amber-400" />
+              <span className="font-bold">
+                {isPt ? 'Modo Offline · Backup Local Ativo' : 'Offline Mode · Local Backup Active'}
+              </span>
+              <span className="text-slate-300 font-normal">
+                ({isPt ? 'nada é apagado, sincroniza ao reconectar' : 'no data deleted, syncs when reconnected'})
+              </span>
+            </span>
+          )}
+
+          <span className="text-slate-400 hidden sm:inline">
+            | {maneuvers.length} {isPt ? 'manobras gravadas' : 'saved maneuvers'}
+          </span>
+          {lastSyncTime && (
+            <span className="text-slate-400 hidden md:inline">
+              | {isPt ? 'Último sync:' : 'Last sync:'} {lastSyncTime}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 ml-auto">
+          <button
+            onClick={syncUnifiedDatabaseNow}
+            disabled={isUnifiedSyncing}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border transition-all cursor-pointer ${
+              isUnifiedSyncing
+                ? 'bg-cyan-900/60 text-cyan-200 border-cyan-700 animate-pulse'
+                : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border-cyan-800'
+            }`}
+            title={isPt ? 'Forçar sincronização unificada entre todos os dispositivos agora' : 'Force unified cross-device sync now'}
+          >
+            <RefreshCw className={`w-3 h-3 ${isUnifiedSyncing ? 'animate-spin' : ''}`} />
+            <span>{isUnifiedSyncing ? (isPt ? 'A sincronizar...' : 'Syncing...') : (isPt ? 'Sincronizar' : 'Sync')}</span>
+          </button>
+
+          <button
+            onClick={exportUnifiedDatabaseBackup}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+            title={isPt ? 'Descarregar cópia de segurança completa da Base de Dados Única (JSON)' : 'Download full unified database offline backup (JSON)'}
+          >
+            <DownloadCloud className="w-3 h-3 text-cyan-400" />
+            <span className="hidden xs:inline">{isPt ? 'Backup Base Única' : 'Unified Backup'}</span>
           </button>
         </div>
       </div>

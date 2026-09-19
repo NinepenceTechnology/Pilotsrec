@@ -83,6 +83,19 @@ interface MaritimeContextType {
   lastSyncTime: string | null;
   refreshAlertsNow: () => Promise<void>;
 
+  // Base de Dados Única & Sincronização Multi-Dispositivo
+  isUnifiedSyncing: boolean;
+  unifiedSyncStats: {
+    totalManeuvers: number;
+    totalAlerts: number;
+    totalVessels: number;
+    totalPilots: number;
+    activeDevices: number;
+    lastSyncTime?: string;
+  };
+  syncUnifiedDatabaseNow: () => Promise<void>;
+  exportUnifiedDatabaseBackup: () => void;
+
   // Actions
   addManeuver: (maneuver: Omit<ManeuverRecord, 'id' | 'createdAt' | 'updatedAt'>) => string;
   updateManeuver: (id: string, updates: Partial<ManeuverRecord>) => void;
@@ -123,7 +136,9 @@ const STORAGE_KEYS = {
   SHIFTS: 'pilots_records_shifts_v2',
   WEATHER: 'pilots_records_weather_v2',
   ALERTS: 'pilots_records_alerts_v2',
-  USER_PROFILE: 'pilots_records_user_profile_v2'
+  USER_PROFILE: 'pilots_records_user_profile_v2',
+  UNIFIED_BACKUP: 'pilots_records_unified_offline_backup_v2',
+  LAST_UNIFIED_SYNC: 'pilots_records_last_unified_sync_time'
 };
 
 const PILOT_BACKUP_PREFIX = 'pilots_records_pilot_backup_v2_';
@@ -166,9 +181,43 @@ export const mergeManeuvers = (listA: ManeuverRecord[], listB: ManeuverRecord[])
     } else {
       const timeA = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
       const timeB = new Date(m.updatedAt || m.createdAt || 0).getTime();
-      if (timeB >= timeA) {
-        map.set(m.id, { ...existing, ...m });
-      }
+
+      // Timestamp fidelity: strictly preserve earliest createdAt and user recorded milestone hours
+      const earliestCreated = existing.createdAt && m.createdAt
+        ? (new Date(existing.createdAt).getTime() <= new Date(m.createdAt).getTime() ? existing.createdAt : m.createdAt)
+        : (existing.createdAt || m.createdAt || new Date().toISOString());
+
+      const latestUpdated = timeB >= timeA
+        ? (m.updatedAt || new Date().toISOString())
+        : (existing.updatedAt || new Date().toISOString());
+
+      // Deep-merge milestones so no recorded hour from any device is erased
+      const mergedMilestones = {
+        ...(existing.milestones || {}),
+        ...(m.milestones || {})
+      };
+
+      // Deep-merge attachments
+      const attMap = new Map<string, any>();
+      (existing.attachments || []).forEach((a: any) => a?.id && attMap.set(a.id, a));
+      (m.attachments || []).forEach((a: any) => a?.id && attMap.set(a.id, a));
+
+      const base = timeB >= timeA ? { ...existing, ...m } : { ...m, ...existing };
+
+      map.set(m.id, {
+        ...base,
+        createdAt: earliestCreated,
+        updatedAt: latestUpdated,
+        scheduledTime: existing.scheduledTime || m.scheduledTime,
+        pilotOnBoardTime: existing.pilotOnBoardTime || m.pilotOnBoardTime,
+        lastLineCastOffTime: existing.lastLineCastOffTime || m.lastLineCastOffTime,
+        firstLineAshored: existing.firstLineAshored || m.firstLineAshored,
+        pilotDisembarkedTime: existing.pilotDisembarkedTime || m.pilotDisembarkedTime,
+        unmooringTime: existing.unmooringTime || m.unmooringTime,
+        berthingTime: existing.berthingTime || m.berthingTime,
+        milestones: mergedMilestones,
+        attachments: Array.from(attMap.values())
+      });
     }
   });
   return Array.from(map.values()).sort((a, b) => 
@@ -178,11 +227,39 @@ export const mergeManeuvers = (listA: ManeuverRecord[], listB: ManeuverRecord[])
 
 export const mergeVessels = (listA: Vessel[], listB: Vessel[]): Vessel[] => {
   const map = new Map<string, Vessel>();
-  (listA || []).forEach(v => { if (v && v.id) map.set(v.id, v); });
+  (listA || []).forEach(v => {
+    const key = v.imo ? `IMO_${v.imo.trim()}` : (v.id || v.name);
+    if (key) map.set(key, v);
+  });
   (listB || []).forEach(v => {
-    if (!v || !v.id) return;
-    if (!map.has(v.id)) {
-      map.set(v.id, v);
+    if (!v) return;
+    const key = v.imo ? `IMO_${v.imo.trim()}` : (v.id || v.name);
+    if (!key) return;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, v);
+    } else {
+      map.set(key, { ...existing, ...v });
+    }
+  });
+  return Array.from(map.values());
+};
+
+export const mergePilots = (listA: Pilot[], listB: Pilot[]): Pilot[] => {
+  const map = new Map<string, Pilot>();
+  (listA || []).forEach(p => {
+    const key = p.licenseNumber || p.id || p.name;
+    if (key) map.set(key, p);
+  });
+  (listB || []).forEach(p => {
+    if (!p) return;
+    const key = p.licenseNumber || p.id || p.name;
+    if (!key) return;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, p);
+    } else {
+      map.set(key, { ...existing, ...p });
     }
   });
   return Array.from(map.values());
@@ -353,6 +430,32 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [activeSyncDevices, setActiveSyncDevices] = useState<number>(1);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
+  // Base de Dados Única & Multi-Dispositivo
+  const [isUnifiedSyncing, setIsUnifiedSyncing] = useState<boolean>(false);
+  const [unifiedSyncStats, setUnifiedSyncStats] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.UNIFIED_BACKUP);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          totalManeuvers: parsed.database?.maneuvers?.length || 0,
+          totalAlerts: parsed.database?.alerts?.length || 0,
+          totalVessels: parsed.database?.vessels?.length || 0,
+          totalPilots: parsed.database?.pilots?.length || 0,
+          activeDevices: 1,
+          lastSyncTime: parsed.timestamp ? new Date(parsed.timestamp).toLocaleTimeString('pt-PT') : undefined
+        };
+      }
+    } catch {}
+    return {
+      totalManeuvers: 0,
+      totalAlerts: 0,
+      totalVessels: 0,
+      totalPilots: 0,
+      activeDevices: 1
+    };
+  });
+
   // Sinal sonoro suave ao receber alerta urgente de outro utilizador/dispositivo
   const playAlertAudioChime = () => {
     try {
@@ -375,7 +478,7 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [terminals] = useState<PortTerminal[]>(INITIAL_TERMINALS);
 
-  // Sync to localStorage
+  // Sync to localStorage & Offline Backup
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(alerts));
@@ -452,7 +555,127 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => clearInterval(timer);
   }, []);
 
-  // Função para sincronizar alertas com o servidor (autoritativo para todos os dispositivos)
+  // Sincronização da Base de Dados Única (Cumulativa e Sem Perdas)
+  const syncUnifiedDatabase = async (mode: 'push_pull' | 'pull_only' = 'push_pull') => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOnline(false);
+      return;
+    }
+    setIsUnifiedSyncing(true);
+    try {
+      const payload = mode === 'push_pull' ? {
+        pilotName: currentUser?.name || 'Piloto em Serviço',
+        maneuvers,
+        alerts,
+        vessels,
+        pilots
+      } : null;
+
+      const res = await fetch('/api/shared/sync-unified', {
+        method: payload ? 'POST' : 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        },
+        body: payload ? JSON.stringify(payload) : undefined
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      if (data.success && data.database) {
+        if (Array.isArray(data.database.maneuvers) && data.database.maneuvers.length > 0) {
+          setManeuvers(prev => {
+            const merged = mergeManeuvers(prev, data.database.maneuvers);
+            try { localStorage.setItem(STORAGE_KEYS.MANEUVERS, JSON.stringify(merged)); } catch {}
+            return merged;
+          });
+        }
+        if (Array.isArray(data.database.alerts)) {
+          setAlerts(prev => {
+            const merged = mergeAlerts(prev, data.database.alerts);
+            try { localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(merged)); } catch {}
+            return merged;
+          });
+        }
+        if (Array.isArray(data.database.vessels) && data.database.vessels.length > 0) {
+          setVessels(prev => {
+            const merged = mergeVessels(prev, data.database.vessels);
+            try { localStorage.setItem(STORAGE_KEYS.VESSELS, JSON.stringify(merged)); } catch {}
+            return merged;
+          });
+        }
+        if (Array.isArray(data.database.pilots) && data.database.pilots.length > 0) {
+          setPilots(prev => {
+            const merged = mergePilots(prev, data.database.pilots);
+            try { localStorage.setItem(STORAGE_KEYS.PILOTS, JSON.stringify(merged)); } catch {}
+            return merged;
+          });
+        }
+
+        const nowFormatted = new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastSyncTime(nowFormatted);
+
+        if (data.stats) {
+          setUnifiedSyncStats({
+            totalManeuvers: data.stats.totalManeuvers ?? (data.database.maneuvers?.length || 0),
+            totalAlerts: data.stats.totalAlerts ?? (data.database.alerts?.length || 0),
+            totalVessels: data.stats.totalVessels ?? (data.database.vessels?.length || 0),
+            totalPilots: data.stats.totalPilots ?? (data.database.pilots?.length || 0),
+            activeDevices: data.stats.activeDevices || 1,
+            lastSyncTime: nowFormatted
+          });
+          setActiveSyncDevices(data.stats.activeDevices || 1);
+        }
+
+        // Salvar snapshot completo de backup offline da base de dados unificada
+        try {
+          localStorage.setItem(STORAGE_KEYS.UNIFIED_BACKUP, JSON.stringify({
+            database: data.database,
+            timestamp: new Date().toISOString(),
+            version: '2026.unified'
+          }));
+          localStorage.setItem(STORAGE_KEYS.LAST_UNIFIED_SYNC, new Date().toISOString());
+        } catch {}
+      }
+    } catch (err) {
+      console.warn('Sync unificado falhou ou conexão indisponível:', err);
+    } finally {
+      setIsUnifiedSyncing(false);
+    }
+  };
+
+  const syncUnifiedDatabaseNow = async () => {
+    await syncUnifiedDatabase('push_pull');
+  };
+
+  const exportUnifiedDatabaseBackup = () => {
+    const backup = {
+      version: '2026.unified',
+      exportedAt: new Date().toISOString(),
+      source: 'Pilots Records - Base de Dados Única & Multi-Dispositivo',
+      stats: {
+        totalManeuvers: maneuvers.length,
+        totalVessels: vessels.length,
+        totalPilots: pilots.length,
+        totalAlerts: alerts.length
+      },
+      maneuvers,
+      vessels,
+      pilots,
+      alerts,
+      shifts
+    };
+    const jsonStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backup, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', jsonStr);
+    downloadAnchor.setAttribute('download', `PILOTS_RECORDS_BASE_UNIFICADA_BACKUP_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  // Função para sincronizar alertas com o servidor (retrocompatível)
   const syncAlertsWithServer = async () => {
     try {
       const res = await fetch('/api/shared/alerts', { 
@@ -497,7 +720,7 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const refreshAlertsNow = async () => {
-    await Promise.all([syncAlertsWithServer(), syncManeuversWithServer()]);
+    await syncUnifiedDatabase('push_pull');
   };
 
   // 1. Conexão em Tempo Real via Server-Sent Events (SSE) para sincronização instantânea entre dispositivos
@@ -532,6 +755,43 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 } catch {}
                 setLastSyncTime(new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
               }
+            } else if (data.type === 'UNIFIED_SYNC' && data.payload) {
+              // Master unified database broadcast from another user or device
+              if (Array.isArray(data.payload.maneuvers)) {
+                setManeuvers(prev => {
+                  const m = mergeManeuvers(prev, data.payload.maneuvers);
+                  try { localStorage.setItem(STORAGE_KEYS.MANEUVERS, JSON.stringify(m)); } catch {}
+                  return m;
+                });
+              }
+              if (Array.isArray(data.payload.alerts)) {
+                setAlerts(prev => {
+                  const a = mergeAlerts(prev, data.payload.alerts);
+                  try { localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(a)); } catch {}
+                  return a;
+                });
+              }
+              if (Array.isArray(data.payload.vessels)) {
+                setVessels(prev => {
+                  const v = mergeVessels(prev, data.payload.vessels);
+                  try { localStorage.setItem(STORAGE_KEYS.VESSELS, JSON.stringify(v)); } catch {}
+                  return v;
+                });
+              }
+              if (Array.isArray(data.payload.pilots)) {
+                setPilots(prev => {
+                  const p = mergePilots(prev, data.payload.pilots);
+                  try { localStorage.setItem(STORAGE_KEYS.PILOTS, JSON.stringify(p)); } catch {}
+                  return p;
+                });
+              }
+              const nowTime = new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+              setLastSyncTime(nowTime);
+              setUnifiedSyncStats(prev => ({
+                ...prev,
+                lastSyncTime: nowTime
+              }));
+              playAlertAudioChime();
             } else if (data.type === 'ALERT_SYNC' && data.payload) {
               if (Array.isArray(data.payload.alerts)) {
                 setAlerts(data.payload.alerts);
@@ -539,8 +799,6 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                   localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(data.payload.alerts));
                 } catch {}
                 setLastSyncTime(new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-                
-                // Disparar toque suave para avisar o piloto de novo alerta urgente
                 if (data.payload.action === 'UPSERT') {
                   playAlertAudioChime();
                 }
@@ -578,25 +836,22 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  // 2. Fallback Polling & Inter-Tab BroadcastChannel
+  // 2. Sincronização Inicial, Polling Unificado & BroadcastChannel Inter-Abas
   useEffect(() => {
-    // Sincronização inicial
-    syncAlertsWithServer();
-    syncManeuversWithServer();
+    // Sincronização unificada inicial
+    syncUnifiedDatabase('push_pull');
 
-    // Fallback polling a cada 4 segundos caso o dispositivo esteja no telemóvel ou SSE seja interrompido
+    // Polling a cada 5 segundos para garantir atualização entre todos os dispositivos
     const intervalId = setInterval(() => {
       if (typeof navigator === 'undefined' || navigator.onLine) {
-        syncAlertsWithServer();
-        syncManeuversWithServer();
+        syncUnifiedDatabase('push_pull');
       }
-    }, 4000);
+    }, 5000);
 
     // Sincronização ao voltar o foco ou reconectar internet
     const handleSyncTrigger = () => {
       setIsOnline(navigator.onLine);
-      syncAlertsWithServer();
-      syncManeuversWithServer();
+      syncUnifiedDatabase('push_pull');
     };
 
     const handleOffline = () => {
@@ -625,11 +880,16 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     window.addEventListener('storage', handleStorage);
 
-    // BroadcastChannel local
+    // BroadcastChannel local entre abas
     if (syncChannel) {
       syncChannel.onmessage = (event) => {
         const { type, payload } = event.data || {};
-        if (type === 'ALERT_UPSERT' && payload) {
+        if (type === 'UNIFIED_SYNC' && payload) {
+          if (Array.isArray(payload.maneuvers)) setManeuvers(prev => mergeManeuvers(prev, payload.maneuvers));
+          if (Array.isArray(payload.alerts)) setAlerts(prev => mergeAlerts(prev, payload.alerts));
+          if (Array.isArray(payload.vessels)) setVessels(prev => mergeVessels(prev, payload.vessels));
+          if (Array.isArray(payload.pilots)) setPilots(prev => mergePilots(prev, payload.pilots));
+        } else if (type === 'ALERT_UPSERT' && payload) {
           setAlerts(prev => {
             const next = [payload, ...prev.filter(a => a.id !== payload.id)];
             try {
@@ -648,8 +908,7 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         } else if (type === 'MANEUVER_UPSERT' && payload) {
           setManeuvers(prev => mergeManeuvers(prev, [payload]));
         } else if (type === 'SYNC_ALL') {
-          syncAlertsWithServer();
-          syncManeuversWithServer();
+          syncUnifiedDatabase('push_pull');
         }
       };
     }
@@ -687,14 +946,23 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [maneuvers, vessels, alerts, shifts, currentUser]);
 
   const addManeuver = (maneuverData: Omit<ManeuverRecord, 'id' | 'createdAt' | 'updatedAt'>): string => {
-    const sequenceNumber = maneuvers.length + 1;
-    const padded = String(sequenceNumber).padStart(4, '0');
-    const newId = `MNV-2026-${padded}`;
+    // Unique ID generation across multiple offline/online devices
+    const timeMs = Date.now().toString().slice(-5);
+    const entropy = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const newId = `MNV-2026-${timeMs}-${entropy}`;
     const now = new Date().toISOString();
+
+    // Timestamp fidelity: preserve the exact recorded time and date
+    const recordedScheduledTime = maneuverData.scheduledTime && !maneuverData.scheduledTime.includes('Invalid')
+      ? maneuverData.scheduledTime
+      : (maneuverData.maneuverDate
+          ? `${maneuverData.maneuverDate}T${maneuverData.pilotOnBoardTime || maneuverData.lastLineCastOffTime || '08:00'}:00.000Z`
+          : now);
 
     const newManeuver: ManeuverRecord = {
       ...maneuverData,
       id: newId,
+      scheduledTime: recordedScheduledTime,
       createdAt: now,
       updatedAt: now
     };
@@ -716,6 +984,11 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch {}
     broadcastSharedEvent('MANEUVER_UPSERT', newManeuver);
 
+    // Also trigger unified sync push in background
+    setTimeout(() => {
+      syncUnifiedDatabase('push_pull').catch(() => {});
+    }, 200);
+
     return newId;
   };
 
@@ -723,9 +996,17 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let updatedItem: ManeuverRecord | null = null;
     setManeuvers(prev => prev.map(m => {
       if (m.id === id) {
+        // Timestamp fidelity: strictly preserve creation time and deep-merge milestones
+        const mergedMilestones = updates.milestones ? {
+          ...(m.milestones || {}),
+          ...updates.milestones
+        } : m.milestones;
+
         updatedItem = {
           ...m,
           ...updates,
+          milestones: mergedMilestones,
+          createdAt: m.createdAt, // strictly lock creation time
           updatedAt: new Date().toISOString()
         };
         return updatedItem;
@@ -742,6 +1023,11 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }).catch(() => {});
       } catch {}
       broadcastSharedEvent('MANEUVER_UPSERT', updatedItem);
+
+      // Trigger unified sync push in background
+      setTimeout(() => {
+        syncUnifiedDatabase('push_pull').catch(() => {});
+      }, 300);
     }
   };
 
@@ -1545,7 +1831,11 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         isRealtimeConnected,
         activeSyncDevices,
         lastSyncTime,
-        refreshAlertsNow
+        refreshAlertsNow,
+        isUnifiedSyncing,
+        unifiedSyncStats,
+        syncUnifiedDatabaseNow,
+        exportUnifiedDatabaseBackup
       }}
     >
       {children}

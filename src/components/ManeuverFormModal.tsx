@@ -822,10 +822,15 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
       updateManeuver(editManeuver.id, maneuverPayload);
     } else {
       const isComplete = Boolean(pilotDisembarkedTime || berthingTime);
+      // Fidelidade estrita à hora e data de registo inseridas pelo piloto
+      const computedScheduledTime = (maneuverDate && (pilotOnBoardTime || lastLineTime))
+        ? `${maneuverDate}T${pilotOnBoardTime || lastLineTime}:00.000Z`
+        : (maneuverDate ? `${maneuverDate}T12:00:00.000Z` : new Date().toISOString());
+
       addManeuver({
         ...maneuverPayload,
         status: isComplete ? 'concluida' : 'em_curso',
-        scheduledTime: new Date().toISOString(),
+        scheduledTime: computedScheduledTime,
         durationMinutes: pilotDuty.minutes || 80,
         weather: weather,
         safetyChecklist: {

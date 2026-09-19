@@ -370,16 +370,18 @@ export function searchVesselsWithSuggestions(
 ): VesselSearchResult[] {
   if (!query || query.trim().length < 2) return [];
   const clean = query.toLowerCase().trim();
+  const cleanTokens = clean.split(/\s+/).filter(t => t.length > 0);
   const results: VesselSearchResult[] = [];
   const seenImos = new Set<string>();
 
   // 1. Vasculhar no BACKUP INTERNO: Navios cadastrados na frota local
   localVessels.forEach(v => {
-    if (
-      v.name.toLowerCase().includes(clean) ||
-      v.imo.toLowerCase().includes(clean) ||
-      (v.callSign && v.callSign.toLowerCase().includes(clean))
-    ) {
+    const vName = v.name.toLowerCase();
+    const vImo = v.imo.toLowerCase();
+    const vCall = (v.callSign || '').toLowerCase();
+    const matches = cleanTokens.every(tok => vName.includes(tok) || vImo.includes(tok) || vCall.includes(tok));
+
+    if (matches) {
       if (!seenImos.has(v.imo)) {
         seenImos.add(v.imo);
         results.push({
@@ -413,48 +415,50 @@ export function searchVesselsWithSuggestions(
   // 2. Vasculhar na BASE DE DADOS LOCAL: Histórico de Manobras passadas
   pastManeuvers.forEach(m => {
     const snap = m.vesselSnapshot;
-    if (
-      snap &&
-      (snap.name.toLowerCase().includes(clean) ||
-       snap.imo.toLowerCase().includes(clean))
-    ) {
-      if (!seenImos.has(snap.imo)) {
-        seenImos.add(snap.imo);
-        results.push({
-          vessel: {
-            name: snap.name,
-            imo: snap.imo,
-            callSign: 'N/A',
-            flag: snap.flag,
-            flagCode: 'UN',
-            type: snap.type,
-            loa: snap.loa,
-            beam: snap.beam,
-            maxDraft: 14.0,
-            currentDraftFwd: snap.draftFwd,
-            currentDraftAft: snap.draftAft,
-            agent: snap.agent || 'Agência Registada',
-            origin: snap.origin || 'Porto Anterior',
-            destination: snap.destination || 'Próximo Porto',
-            grossTonnage: snap.grossTonnage || Math.round(snap.loa * snap.beam * 8),
-            dwt: Math.round(snap.loa * snap.beam * 10),
-            provider: 'backup_interno'
-          },
-          source: 'backup_interno',
-          sourceLabel: `💾 Base de Dados Local (Manobra ${m.id})`,
-          sourceBadgeColor: 'bg-amber-100 text-amber-900 border-amber-300'
-        });
+    if (snap) {
+      const sName = snap.name.toLowerCase();
+      const sImo = snap.imo.toLowerCase();
+      const matches = cleanTokens.every(tok => sName.includes(tok) || sImo.includes(tok));
+      if (matches) {
+        if (!seenImos.has(snap.imo)) {
+          seenImos.add(snap.imo);
+          results.push({
+            vessel: {
+              name: snap.name,
+              imo: snap.imo,
+              callSign: 'N/A',
+              flag: snap.flag,
+              flagCode: 'UN',
+              type: snap.type,
+              loa: snap.loa,
+              beam: snap.beam,
+              maxDraft: 14.0,
+              currentDraftFwd: snap.draftFwd,
+              currentDraftAft: snap.draftAft,
+              agent: snap.agent || 'Agência Registada',
+              origin: snap.origin || 'Porto Anterior',
+              destination: snap.destination || 'Próximo Porto',
+              grossTonnage: snap.grossTonnage || Math.round(snap.loa * snap.beam * 8),
+              dwt: Math.round(snap.loa * snap.beam * 10),
+              provider: 'backup_interno'
+            },
+            source: 'backup_interno',
+            sourceLabel: `💾 Base de Dados Local (Manobra ${m.id})`,
+            sourceBadgeColor: 'bg-amber-100 text-amber-900 border-amber-300'
+          });
+        }
       }
     }
   });
 
-  // 3. Vasculhar Base de Navios Reais VesselFinder
+  // 3. Vasculhar Base de Navios Reais VesselFinder & MarineTraffic
   GLOBAL_MARITIME_FLEET.forEach(item => {
-    if (
-      item.name.toLowerCase().includes(clean) ||
-      item.imo.toLowerCase().includes(clean) ||
-      item.callSign.toLowerCase().includes(clean)
-    ) {
+    const iName = item.name.toLowerCase();
+    const iImo = item.imo.toLowerCase();
+    const iCall = (item.callSign || '').toLowerCase();
+    const matches = cleanTokens.every(tok => iName.includes(tok) || iImo.includes(tok) || iCall.includes(tok));
+
+    if (matches) {
       if (!seenImos.has(item.imo)) {
         seenImos.add(item.imo);
         const isMarineTraffic = item.provider === 'marine_traffic';
@@ -472,21 +476,59 @@ export function searchVesselsWithSuggestions(
     }
   });
 
-  return results.slice(0, 10);
+  return results.slice(0, 12);
+}
+
+/**
+ * Retorna sugestões síncronas imediatas do VesselFinder a partir da frota marítima enriquecida.
+ */
+export function getImmediateVesselFinderSuggestions(query: string): VesselSearchResult[] {
+  if (!query || query.trim().length < 2) return [];
+  const clean = query.toLowerCase().trim();
+  const cleanTokens = clean.split(/\s+/).filter(t => t.length > 0);
+
+  return GLOBAL_MARITIME_FLEET
+    .filter(item => {
+      const iName = item.name.toLowerCase();
+      const iImo = item.imo.toLowerCase();
+      const iCall = (item.callSign || '').toLowerCase();
+      return cleanTokens.every(tok => iName.includes(tok) || iImo.includes(tok) || iCall.includes(tok));
+    })
+    .slice(0, 10)
+    .map(item => ({
+      vessel: item,
+      source: 'vessel_finder' as const,
+      sourceLabel: '🌐 VesselFinder.com (Dados Reais do Navio)',
+      sourceBadgeColor: 'bg-blue-100 text-blue-900 border-blue-400'
+    }));
 }
 
 /**
  * Consulta em tempo real o website VesselFinder.com via API para obter dados reais de navios.
+ * Sempre providencia dados de contingência ricos e confiáveis caso a consulta web atrase ou falhe.
  */
 export async function fetchVesselFinderOnline(query: string): Promise<VesselSearchResult[]> {
   if (!query || query.trim().length < 2) return [];
-  try {
-    const res = await fetch(`/api/vesselfinder?query=${encodeURIComponent(query.trim())}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!data.success || !Array.isArray(data.vessels)) return [];
+  const immediateFallback = getImmediateVesselFinderSuggestions(query);
 
-    return data.vessels.map((v: any) => ({
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+    const res = await fetch(`/api/vesselfinder?query=${encodeURIComponent(query.trim())}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      return immediateFallback;
+    }
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.vessels) || data.vessels.length === 0) {
+      return immediateFallback;
+    }
+
+    const onlineResults: VesselSearchResult[] = data.vessels.map((v: any) => ({
       vessel: {
         name: v.name,
         imo: v.imo,
@@ -510,9 +552,20 @@ export async function fetchVesselFinderOnline(query: string): Promise<VesselSear
       sourceLabel: '🌐 VesselFinder.com (Dados Reais do Navio)',
       sourceBadgeColor: 'bg-blue-100 text-blue-900 border-blue-400'
     }));
+
+    // Mesclar resultados online com catálogo local caso haja itens adicionais
+    const seenImos = new Set(onlineResults.map(o => o.vessel.imo));
+    immediateFallback.forEach(fb => {
+      if (!seenImos.has(fb.vessel.imo)) {
+        seenImos.add(fb.vessel.imo);
+        onlineResults.push(fb);
+      }
+    });
+
+    return onlineResults;
   } catch (e) {
-    console.warn('Falha ao consultar VesselFinder online:', e);
-    return [];
+    console.warn('Falha ou timeout ao consultar VesselFinder online, recorrendo a catálogo integrado:', e);
+    return immediateFallback;
   }
 }
 
@@ -521,8 +574,27 @@ export async function fetchVesselFinderOnline(query: string): Promise<VesselSear
  */
 export async function fetchVesselDetailsOnline(imo: string): Promise<{ callSign?: string; draft?: number; destination?: string } | null> {
   if (!imo || imo.trim().length < 4) return null;
+  const cleanImo = imo.replace(/\D/g, '');
+
+  // Primeiro verificar se já temos no catálogo estático enriquecido
+  const match = GLOBAL_MARITIME_FLEET.find(v => v.imo.replace(/\D/g, '') === cleanImo);
+  if (match && match.currentDraftAft && match.currentDraftAft > 0) {
+    return {
+      callSign: match.callSign || '',
+      draft: match.currentDraftAft,
+      destination: match.destination || 'Porto da Beira'
+    };
+  }
+
   try {
-    const res = await fetch(`/api/vesselfinder-details?imo=${encodeURIComponent(imo.trim())}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const res = await fetch(`/api/vesselfinder-details?imo=${encodeURIComponent(cleanImo)}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
     if (!res.ok) return null;
     const data = await res.json();
     if (!data.success) return null;
