@@ -159,23 +159,20 @@ export const SafetyChecklistView: React.FC = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
-            <ShieldCheck className="w-6 h-6 text-emerald-400" />
-            Segurança Náutica, MPX & Auditoria de Conformidade
+          <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            Segurança Náutica & MPX
           </h2>
-          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-            Checklist obrigatório de passadiço, escada de prático (SOLAS V/23), equipamentos de navegação e troca MPX
-          </p>
         </div>
 
         <button
           onClick={handleSaveAudit}
-          className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition-all active:scale-95"
+          className="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95"
         >
-          <Save className="w-4 h-4" />
-          <span>Salvar Auditoria na Manobra</span>
+          <Save className="w-3.5 h-3.5" />
+          <span>Guardar Auditoria</span>
         </button>
       </div>
 

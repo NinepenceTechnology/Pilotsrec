@@ -403,12 +403,10 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
 
   const onlineSearchTimeoutRef = useRef<any>(null);
 
-  // Handle Ship Name typing with Local Database + Live VesselFinder.com Suggestions
-  const handleShipNameChange = (query: string) => {
-    setShipName(query);
-    setDataSourceNotification(null);
-
-    if (query.trim().length < 2) {
+  // Busca unificada e automática: combina base local instantânea com VesselFinder online sem botões manuais
+  const runUnifiedVesselSearch = (searchTerm: string) => {
+    const q = searchTerm.trim();
+    if (q.length < 2) {
       setSuggestions([]);
       setIsDropdownOpen(false);
       setIsSearchingOnline(false);
@@ -416,19 +414,19 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
       return;
     }
 
-    // 1. Instant search from LOCAL DATABASE (registered vessels and past maneuvers)
-    const localMatches = searchVesselsWithSuggestions(query, vessels, maneuvers);
+    // 1. Busca imediata na base local (navios cadastrados e manobras gravadas)
+    const localMatches = searchVesselsWithSuggestions(q, vessels, maneuvers);
     setSuggestions(localMatches);
     setIsDropdownOpen(localMatches.length > 0);
 
-    // 2. Query VesselFinder.com via backend proxy with debouncing
+    // 2. Consulta em segundo plano ao VesselFinder via backend proxy
     if (onlineSearchTimeoutRef.current) clearTimeout(onlineSearchTimeoutRef.current);
 
     if (isOnline) {
       setIsSearchingOnline(true);
       onlineSearchTimeoutRef.current = setTimeout(async () => {
         try {
-          const onlineResults = await fetchVesselFinderOnline(query);
+          const onlineResults = await fetchVesselFinderOnline(q);
           if (onlineResults && onlineResults.length > 0) {
             setSuggestions(prev => {
               const seenImos = new Set(prev.map(p => p.vessel.imo));
@@ -444,90 +442,25 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
             setIsDropdownOpen(true);
           }
         } catch (err) {
-          console.warn('Erro ao carregar dados do VesselFinder:', err);
+          console.warn('Consulta ao VesselFinder:', err);
         } finally {
           setIsSearchingOnline(false);
         }
-      }, 400);
+      }, 300);
     }
   };
 
-  // Busca forçada imediata online no VesselFinder.com
-  const handleSearchOnlineNow = async () => {
-    const q = shipName.trim() || imoNumber.trim();
-    if (!q) return;
-    setIsSearchingOnline(true);
-    try {
-      const onlineResults = await fetchVesselFinderOnline(q);
-      const localMatches = searchVesselsWithSuggestions(q, vessels, maneuvers);
-      const merged = [...localMatches];
-      const seen = new Set(merged.map(m => m.vessel.imo));
-      (onlineResults || []).forEach(item => {
-        if (!seen.has(item.vessel.imo)) {
-          seen.add(item.vessel.imo);
-          merged.push(item);
-        }
-      });
-      setSuggestions(merged);
-      setIsDropdownOpen(true);
-      if (merged.length === 1) {
-        applyVesselData(merged[0]);
-      }
-    } catch (err) {
-      console.warn('Erro ao consultar VesselFinder:', err);
-    } finally {
-      setIsSearchingOnline(false);
-    }
+  const handleShipNameChange = (query: string) => {
+    setShipName(query);
+    setDataSourceNotification(null);
+    runUnifiedVesselSearch(query);
   };
 
-  // Busca rápida na Frota Local registada
-  const handleSearchLocalNow = () => {
-    const q = shipName.trim() || imoNumber.trim();
-    const localMatches = searchVesselsWithSuggestions(q || '', vessels, maneuvers);
-    setSuggestions(localMatches);
-    setIsDropdownOpen(true);
-    if (localMatches.length === 1) {
-      applyVesselData(localMatches[0]);
-    }
-  };
-
-  // Consulta e auto-preenchimento direto pelo Número IMO
-  const handleLookupByImo = async () => {
-    const cleanImo = imoNumber.replace(/\D/g, '');
-    if (!cleanImo || cleanImo.length < 5) return;
-    setIsSearchingOnline(true);
-    try {
-      // 1. Procurar primeiro na base local
-      const localMatches = searchVesselsWithSuggestions(cleanImo, vessels, maneuvers);
-      const exactLocal = localMatches.find(m => m.vessel.imo.replace(/\D/g, '') === cleanImo);
-      if (exactLocal) {
-        applyVesselData(exactLocal);
-        setIsSearchingOnline(false);
-        return;
-      }
-
-      // 2. Consultar online no VesselFinder
-      const onlineResults = await fetchVesselFinderOnline(cleanImo);
-      if (onlineResults && onlineResults.length > 0) {
-        applyVesselData(onlineResults[0]);
-      } else {
-        const details = await fetchVesselDetailsOnline(cleanImo);
-        if (details) {
-          if (details.draft && details.draft > 0) {
-            setDraftAft(details.draft);
-            setDraftFwd(Math.max(0, parseFloat((details.draft - 0.4).toFixed(1))));
-          }
-          if (details.destination && !nextPort) setNextPort(details.destination);
-          setDataSourceNotification({
-            source: 'online',
-            message: `🌐 VesselFinder.com: IMO ${cleanImo} (Calado ${details.draft ? details.draft + 'm' : '___'} · Destino: ${details.destination || 'Em rota'})`
-          });
-        }
-      }
-    } catch (e) {
-      console.warn('Erro ao consultar por IMO:', e);
-    } finally {
-      setIsSearchingOnline(false);
+  const handleImoChange = (query: string) => {
+    setImoNumber(query);
+    setDataSourceNotification(null);
+    if (query.trim().length >= 3) {
+      runUnifiedVesselSearch(query);
     }
   };
 
@@ -1034,122 +967,99 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
             </div>
           </div>
 
-          {/* DADOS DO NAVIO COM BUSCA AUTOMÁTICA PELA INTERNET E SUGESTÃO */}
-          <div className="border-2 border-slate-300 rounded-lg p-4 bg-white space-y-4">
+          {/* DADOS DO NAVIO COM BUSCA UNIFICADA AUTOMÁTICA */}
+          <div className="border-2 border-slate-300 rounded-lg p-3.5 bg-white space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-200 pb-2">
-              <h3 className="text-sm font-black uppercase text-blue-900 flex items-center gap-2">
+              <h3 className="text-xs sm:text-sm font-black uppercase text-blue-950 flex items-center gap-2">
                 <Ship className="w-4 h-4 text-blue-700" />
-                1. DADOS DO NAVIO & IDENTIFICAÇÃO (Auto-Preenchimento Online & Local)
+                1. DADOS DO NAVIO & IDENTIFICAÇÃO
               </h3>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleSearchLocalNow}
-                  className="px-2.5 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[11px] flex items-center gap-1 transition-colors"
-                  title="Buscar na base de navios já cadastrados e manobras anteriores"
-                >
-                  <span>💾</span>
-                  <span>Frota Local</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSearchOnlineNow}
-                  disabled={isSearchingOnline}
-                  className="px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 font-bold text-[11px] flex items-center gap-1 transition-colors"
-                  title="Buscar ao vivo dados técnicos do navio no site VesselFinder.com"
-                >
-                  <span>🌐</span>
-                  <span>{isSearchingOnline ? 'Buscando...' : 'VesselFinder.com'}</span>
-                </button>
-              </div>
+              {isSearchingOnline && (
+                <div className="flex items-center gap-1.5 text-[11px] text-blue-800 font-bold">
+                  <span className="w-3.5 h-3.5 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
+                  <span>A pesquisar no VesselFinder...</span>
+                </div>
+              )}
             </div>
 
             {/* Campo NOME DO NAVIO com autocomplete inteligente */}
             <div ref={searchContainerRef} className="relative">
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold uppercase text-black">
-                  NOME DO NAVIO *
-                </label>
-                <span className="text-[11px] text-slate-500 font-medium">
-                  {isOnline ? '🌐 Conectado ao VesselFinder' : '💾 Busca local offline'}
-                </span>
-              </div>
-              <div className="relative flex items-center gap-1.5">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={shipName}
-                    onChange={(e) => handleShipNameChange(e.target.value)}
-                    onFocus={() => {
-                      if (suggestions.length > 0) setIsDropdownOpen(true);
-                    }}
-                    placeholder="Digite o nome do navio (ex: MSC ANNA VICTORIA, EVER GIVEN, PETROBRAS...)"
-                    className="w-full bg-white border-2 border-black rounded-md px-3.5 py-2.5 text-sm font-bold text-black placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800 focus:border-blue-800 uppercase pr-10"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                    {isSearchingOnline && (
-                      <span className="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
-                    )}
+              <label className="block text-[11px] font-bold uppercase text-black mb-1">
+                NOME DO NAVIO *
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={shipName}
+                  onChange={(e) => handleShipNameChange(e.target.value)}
+                  onFocus={() => {
+                    if (suggestions.length > 0) setIsDropdownOpen(true);
+                  }}
+                  placeholder="Digite o nome do navio ou IMO (ex: MSC ANNA VICTORIA, EVER GIVEN...)"
+                  className="w-full bg-white border-2 border-black rounded-md px-3 py-2 text-xs sm:text-sm font-bold text-black placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800 focus:border-blue-800 uppercase pr-10"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
+                  {isSearchingOnline ? (
+                    <span className="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
                     <Search className="w-4 h-4 text-slate-400" />
-                  </div>
+                  )}
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleSearchOnlineNow}
-                  disabled={isSearchingOnline || !shipName.trim()}
-                  className="px-3 py-2.5 bg-blue-900 hover:bg-blue-800 disabled:opacity-50 text-white rounded-md font-bold text-xs border border-black shadow-xs flex items-center gap-1 shrink-0"
-                  title="Consultar dados deste navio no VesselFinder agora"
-                >
-                  <Search className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Pesquisar</span>
-                </button>
               </div>
 
               {/* Feedback badge if auto-filled */}
               {dataSourceNotification && (
-                <div className={`mt-2 text-xs p-2 rounded border flex items-center gap-2 ${
+                <div className={`mt-2 text-xs p-2 rounded border flex items-center justify-between gap-2 ${
                   dataSourceNotification.source === 'online'
                     ? 'bg-blue-50 text-blue-900 border-blue-300'
                     : 'bg-emerald-50 text-emerald-900 border-emerald-300'
                 }`}>
-                  <Sparkles className="w-4 h-4 shrink-0 text-blue-700" />
-                  <span className="font-semibold">{dataSourceNotification.message}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 shrink-0 text-blue-700" />
+                    <span className="font-semibold">{dataSourceNotification.message}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDataSourceNotification(null)}
+                    className="text-slate-500 hover:text-black font-bold p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
 
               {/* Suggestions Dropdown (Local + Online) */}
               {isDropdownOpen && suggestions.length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-black rounded-lg shadow-xl z-30 max-h-64 overflow-y-auto divide-y divide-slate-100">
-                  <div className="px-3 py-1.5 bg-blue-900 text-white text-[11px] font-bold uppercase tracking-wider flex justify-between">
-                    <span>Sugestões Encontradas ({suggestions.length})</span>
-                    <span>Clique para preencher todos os dados</span>
+                  <div className="px-3 py-1.5 bg-blue-950 text-white text-[10px] font-bold uppercase tracking-wider flex justify-between">
+                    <span>Sugestões ({suggestions.length})</span>
+                    <span>Clique para selecionar</span>
                   </div>
                   {suggestions.map((item, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => applyVesselData(item)}
-                      className="w-full text-left px-3.5 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2"
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2"
                     >
                       <div>
-                        <div className="font-bold text-sm text-black flex items-center gap-2">
+                        <div className="font-bold text-xs sm:text-sm text-black flex items-center gap-2">
                           <span>{item.vessel.name}</span>
-                          <span className="text-[11px] font-mono px-1.5 py-0.2 bg-slate-100 border border-slate-300 rounded text-slate-700">
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 bg-slate-100 border border-slate-300 rounded text-slate-700">
                             IMO {item.vessel.imo}
                           </span>
                         </div>
-                        <div className="text-xs text-slate-600 flex items-center gap-2 mt-0.5 flex-wrap">
+                        <div className="text-[11px] text-slate-600 flex items-center gap-2 mt-0.5 flex-wrap">
                           <span>Bandeira: <strong>{item.vessel.flag}</strong></span>
                           <span>·</span>
                           <span>LOA: <strong>{item.vessel.loa}m</strong></span>
                           <span>·</span>
-                          <span>Largura: <strong>{item.vessel.beam}m</strong></span>
+                          <span>Boca: <strong>{item.vessel.beam}m</strong></span>
                           <span>·</span>
                           <span>GRT: <strong>{item.vessel.grossTonnage.toLocaleString()}</strong></span>
                         </div>
                       </div>
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border whitespace-nowrap ${item.sourceBadgeColor}`}>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap ${item.sourceBadgeColor}`}>
                         {item.sourceLabel}
                       </span>
                     </button>
@@ -1158,44 +1068,19 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
               )}
             </div>
 
-            {/* Grid dos dados técnicos do navio requeridos pelo usuário: IMO, TIPO, LOA, BEAM, GRT, NACIONALIDADE, CALADOS */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+            {/* Grid dos dados técnicos do navio: IMO, TIPO, LOA, BEAM, GRT, NACIONALIDADE, CALADOS */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
               <div className="col-span-2">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-[11px] font-bold uppercase text-black">
-                    NÚMERO IMO *
-                  </label>
-                  {imoNumber.trim().length >= 5 && (
-                    <button
-                      type="button"
-                      onClick={handleLookupByImo}
-                      disabled={isSearchingOnline}
-                      className="text-[10px] font-bold text-blue-800 hover:text-blue-900 underline flex items-center gap-0.5"
-                      title="Consultar e preencher dados deste IMO no VesselFinder"
-                    >
-                      <span>🌐 Consultar IMO</span>
-                    </button>
-                  )}
-                </div>
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    value={imoNumber}
-                    onChange={(e) => setImoNumber(e.target.value)}
-                    placeholder="___"
-                    className="w-full bg-white border border-black rounded px-2.5 py-2 text-sm font-bold text-black placeholder:text-slate-400 font-mono"
-                  />
-                  {imoNumber.trim().length >= 6 && (
-                    <button
-                      type="button"
-                      onClick={handleLookupByImo}
-                      disabled={isSearchingOnline}
-                      className="absolute right-1 px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-900 text-[10px] font-bold rounded border border-blue-300"
-                    >
-                      Auto-Preencher
-                    </button>
-                  )}
-                </div>
+                <label className="block text-[11px] font-bold uppercase text-black mb-1">
+                  NÚMERO IMO *
+                </label>
+                <input
+                  type="text"
+                  value={imoNumber}
+                  onChange={(e) => handleImoChange(e.target.value)}
+                  placeholder="___"
+                  className="w-full bg-white border border-black rounded px-2.5 py-1.5 text-xs sm:text-sm font-bold text-black placeholder:text-slate-400 font-mono"
+                />
               </div>
 
               <div>
@@ -1615,7 +1500,7 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
                       </option>
                     ))}
                   {pilots.length === 0 && !currentUser && (
-                    <option value="">{language === 'pt' ? 'Nenhum prático registado' : 'No pilot registered'}</option>
+                    <option value="">{language === 'pt' ? 'Nenhum piloto registado' : 'No pilot registered'}</option>
                   )}
                 </select>
               </div>
@@ -1755,34 +1640,34 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
             />
           </div>
 
-          {/* 5. CENTRO DE ANEXOS DA MANOBRA (MULTI-FONTES: CÂMERA, ARQUIVOS, COLAR CTR+V, PDF) */}
-          <div className="space-y-3">
+          {/* 5. ANEXOS DA MANOBRA (MULTI-DOCUMENTOS: FOTOS / PDF) */}
+          <div className="space-y-2.5">
             <AttachmentManager
               attachments={attachments}
               onChange={handleAttachmentsChange}
-              title="5. CENTRO DE ANEXOS DA MANOBRA (CÂMERA, FICHEIROS, COLAR OU PDF)"
+              title="5. DOCUMENTOS & ANEXOS (FOTOS OU PDF)"
             />
 
             {/* Ação Rápida de Download do Relatório com Anexos */}
-            <div className="bg-slate-900 text-white rounded-xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 border-2 border-black shadow">
+            <div className="bg-slate-900 text-white rounded-lg p-2.5 sm:p-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 border-2 border-black">
               <div className="text-xs text-slate-300">
-                <span className="font-bold text-white">Relatório Oficial de Manobra:</span> Todos os {attachments.length} anexo(s) serão incorporados nas páginas seguintes do documento oficial.
+                <span className="font-bold text-white">Relatório Oficial:</span> {attachments.length} documento(s) anexado(s) serão incluídos no PDF oficial.
               </div>
               <button
                 type="button"
                 onClick={handleQuickDownloadPdf}
                 disabled={isGeneratingPdf}
-                className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-colors border border-blue-400 shrink-0"
+                className="w-full sm:w-auto px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-md font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-blue-400 shrink-0"
               >
                 {isGeneratingPdf ? (
                   <>
                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    <span>Gerando PDF Completo...</span>
+                    <span>A gerar PDF...</span>
                   </>
                 ) : (
                   <>
-                    <Download className="w-4 h-4 text-white" />
-                    <span>Descarregar PDF Oficial com Anexos</span>
+                    <Download className="w-3.5 h-3.5 text-white" />
+                    <span>Descarregar PDF Oficial</span>
                   </>
                 )}
               </button>
@@ -1790,12 +1675,12 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
           </div>
 
           {/* BOTÕES DE AÇÃO DO FORMULÁRIO */}
-          <div className="pt-4 border-t-2 border-black flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="pt-3 border-t-2 border-black flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="w-full sm:w-auto flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2.5 rounded-lg border-2 border-slate-400 font-bold text-sm text-slate-700 hover:bg-slate-100 transition-colors"
+                className="px-3 py-1.5 rounded-md border-2 border-slate-400 font-bold text-xs text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 Cancelar
               </button>
@@ -1803,32 +1688,30 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
               <button
                 type="button"
                 onClick={handleManualSaveDraft}
-                className="px-4 py-2.5 rounded-lg border-2 border-amber-600 bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-sm flex items-center justify-center gap-2 transition-colors shadow-xs"
-                title="Salva um rascunho de backup deste documento sem fechar"
+                className="px-3 py-1.5 rounded-md border-2 border-amber-600 bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
               >
-                <Clock className="w-4 h-4 text-amber-700" />
-                <span>Guardar Rascunho / Backup</span>
+                <Clock className="w-3.5 h-3.5 text-amber-700" />
+                <span>Guardar Rascunho</span>
               </button>
             </div>
 
-            <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2">
+            <div className="w-full sm:w-auto flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleQuickDownloadPdf}
                 disabled={isGeneratingPdf}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-lg border-2 border-black bg-white hover:bg-blue-50 text-blue-900 font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                className="px-3 py-1.5 rounded-md border-2 border-black bg-white hover:bg-blue-50 text-blue-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
               >
-                <FileText className="w-4 h-4" />
+                <FileText className="w-3.5 h-3.5 text-blue-900" />
                 <span>Exportar PDF</span>
               </button>
 
               <button
                 type="submit"
-                className="w-full sm:w-auto px-6 py-2.5 rounded-lg border-2 border-black bg-blue-900 hover:bg-blue-800 text-white font-bold text-sm tracking-wide shadow-md flex items-center justify-center gap-2 transition-colors"
-                title="Guarda a manobra no sistema (aceita preenchimento parcial)"
+                className="px-4 py-1.5 rounded-md border-2 border-black bg-blue-950 hover:bg-blue-900 text-white font-black text-xs tracking-wide shadow-xs flex items-center justify-center gap-1.5 transition-colors"
               >
-                <Check className="w-4 h-4 text-blue-300 stroke-[3]" />
-                <span>GUARDAR MANOBRA (ACEITA PARCIAL)</span>
+                <Check className="w-3.5 h-3.5 text-emerald-300 stroke-[3]" />
+                <span>GUARDAR REGISTO</span>
               </button>
             </div>
           </div>

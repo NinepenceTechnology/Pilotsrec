@@ -73,26 +73,18 @@ export const PilotsView: React.FC = () => {
       {/* Header */}
       <div className="bg-white border-2 border-black rounded-xl p-5 shadow flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs bg-blue-900 text-white font-bold px-2 py-0.5 rounded border border-black uppercase">
-              Recursos Humanos & Operações
-            </span>
-          </div>
-          <h2 className="text-2xl font-black text-black tracking-tight mt-1 flex items-center gap-2.5">
-            <Users className="w-6 h-6 text-blue-900" />
+          <h2 className="text-xl font-black text-black tracking-tight flex items-center gap-2">
+            <Users className="w-5 h-5 text-blue-900" />
             Corpo de Pilotos & Escala de Turnos
           </h2>
-          <p className="text-xs sm:text-sm text-slate-600">
-            Gestão da escala de serviço (ativo/prevenção/folga), CIR marítima e histórico individual de manobras
-          </p>
         </div>
 
         <button
           onClick={() => setIsAddingPilot(true)}
-          className="px-4 py-2.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold flex items-center gap-2 transition-all border-2 border-black shadow"
+          className="px-3 py-1.5 rounded-md bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all border-2 border-black shadow-xs active:scale-95"
         >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>Cadastrar Novo Piloto</span>
+          <Plus className="w-3.5 h-3.5 stroke-[3]" />
+          <span>Novo Piloto</span>
         </button>
       </div>
 
@@ -123,7 +115,7 @@ export const PilotsView: React.FC = () => {
               </div>
               <div className="space-y-1.5 text-slate-800">
                 {pilots.filter(p => p.currentShift.includes('Manhã') || p.status === 'de_servico' || p.status === 'em_manobra').length === 0 ? (
-                  <span className="text-[11px] text-slate-500 italic">Sem práticos neste turno</span>
+                  <span className="text-[11px] text-slate-500 italic">Sem pilotos neste turno</span>
                 ) : (
                   pilots.filter(p => p.currentShift.includes('Manhã') || p.status === 'de_servico' || p.status === 'em_manobra').map(p => (
                     <div key={p.id} className="flex items-center justify-between">
@@ -146,7 +138,7 @@ export const PilotsView: React.FC = () => {
               </div>
               <div className="space-y-1.5 text-slate-800">
                 {pilots.filter(p => p.currentShift.includes('Noite') || p.status === 'prevencao').length === 0 ? (
-                  <span className="text-[11px] text-slate-500 italic">Sem práticos neste turno</span>
+                  <span className="text-[11px] text-slate-500 italic">Sem pilotos neste turno</span>
                 ) : (
                   pilots.filter(p => p.currentShift.includes('Noite') || p.status === 'prevencao').map(p => (
                     <div key={p.id} className="flex items-center justify-between">
@@ -167,7 +159,7 @@ export const PilotsView: React.FC = () => {
               </div>
               <div className="space-y-1.5 text-slate-800">
                 {pilots.filter(p => p.currentShift.includes('Madrugada') || p.status === 'folga').length === 0 ? (
-                  <span className="text-[11px] text-slate-500 italic">Sem práticos neste turno</span>
+                  <span className="text-[11px] text-slate-500 italic">Sem pilotos neste turno</span>
                 ) : (
                   pilots.filter(p => p.currentShift.includes('Madrugada') || p.status === 'folga').map(p => (
                     <div key={p.id} className="flex items-center justify-between">
@@ -188,7 +180,7 @@ export const PilotsView: React.FC = () => {
         <div className="bg-white border-2 border-black rounded-xl p-4 shadow space-y-3">
           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
             <h3 className="font-black text-sm uppercase text-blue-900">
-              Práticos Habilitados ({pilots.length})
+              Pilotos Registados ({pilots.length})
             </h3>
             <span className="text-xs text-slate-500 font-semibold">Selecione para ver ficha</span>
           </div>
@@ -196,7 +188,7 @@ export const PilotsView: React.FC = () => {
           <div className="space-y-2 max-h-[580px] overflow-y-auto pr-1">
             {pilots.length === 0 ? (
               <div className="p-6 text-center text-slate-500 border border-dashed border-slate-300 rounded-lg text-xs">
-                Nenhum prático registado.
+                Nenhum piloto registado.
               </div>
             ) : (
               pilots.map(p => {
@@ -331,7 +323,7 @@ export const PilotsView: React.FC = () => {
 
                 {pilotManeuvers.length === 0 ? (
                   <div className="p-6 bg-slate-50 border border-slate-200 rounded-lg text-center text-xs text-slate-500">
-                    Nenhuma manobra registrada para este prático no período atual.
+                    Nenhuma manobra registada para este piloto no período atual.
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -370,37 +362,34 @@ export const PilotsView: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="bg-white border-2 border-black rounded-xl p-12 text-center text-slate-500 shadow flex flex-col items-center justify-center">
-              <Users className="w-12 h-12 text-slate-400 mb-3" />
-              <h3 className="font-bold text-base text-black">Nenhum prático registado</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                O sistema está iniciado do zero. Registe o primeiro prático da equipa para gerir a escala de turnos e o histórico de manobras.
-              </p>
+            <div className="bg-white border-2 border-black rounded-xl p-8 text-center text-slate-500 shadow flex flex-col items-center justify-center">
+              <Users className="w-10 h-10 text-slate-400 mb-2" />
+              <h3 className="font-bold text-sm text-black">Nenhum piloto registado</h3>
               <button
                 onClick={() => setIsAddingPilot(true)}
-                className="mt-4 px-4 py-2 bg-blue-900 text-white font-bold text-xs rounded-lg border border-black inline-flex items-center gap-2 hover:bg-blue-800"
+                className="mt-3 px-3 py-1.5 bg-blue-900 text-white font-bold text-xs rounded-md border border-black inline-flex items-center gap-1.5 hover:bg-blue-800"
               >
-                <Plus className="w-4 h-4" />
-                <span>Cadastrar Primeiro Prático</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>Cadastrar Primeiro Piloto</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal: Adicionar Prático */}
+      {/* Modal: Adicionar Piloto */}
       {isAddingPilot && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border-2 border-black rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4 text-slate-900">
-            <div className="flex items-center justify-between border-b-2 border-black pb-3">
-              <h3 className="font-black text-base text-blue-900 uppercase">
-                Cadastrar Novo Prático
+          <div className="bg-white border-2 border-black rounded-xl max-w-md w-full p-5 shadow-2xl space-y-3 text-slate-900">
+            <div className="flex items-center justify-between border-b-2 border-black pb-2">
+              <h3 className="font-black text-sm text-blue-900 uppercase">
+                Cadastrar Novo Piloto
               </h3>
               <button
                 onClick={() => setIsAddingPilot(false)}
                 className="p-1 rounded bg-black text-white hover:bg-slate-800"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -413,8 +402,8 @@ export const PilotsView: React.FC = () => {
                   type="text"
                   value={newPilotName}
                   onChange={(e) => setNewPilotName(e.target.value)}
-                  placeholder="Ex: Cmte. Fernando Rocha"
-                  className="w-full bg-white border border-black rounded px-3 py-2 text-xs font-semibold text-black"
+                  placeholder="Ex: Fernando Rocha"
+                  className="w-full bg-white border border-black rounded px-3 py-1.5 text-xs font-semibold text-black"
                   required
                 />
               </div>
@@ -427,8 +416,8 @@ export const PilotsView: React.FC = () => {
                   type="text"
                   value={newLicense}
                   onChange={(e) => setNewLicense(e.target.value)}
-                  placeholder="Ex: CIR-2026-PRAT-09"
-                  className="w-full bg-white border border-black rounded px-3 py-2 text-xs font-semibold text-black"
+                  placeholder="Ex: CIR-2026-PILOT-09"
+                  className="w-full bg-white border border-black rounded px-3 py-1.5 text-xs font-semibold text-black"
                   required
                 />
               </div>
@@ -440,11 +429,11 @@ export const PilotsView: React.FC = () => {
                 <select
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value as Pilot['category'])}
-                  className="w-full bg-white border border-black rounded px-3 py-2 text-xs font-semibold text-black"
+                  className="w-full bg-white border border-black rounded px-3 py-1.5 text-xs font-semibold text-black"
                 >
-                  <option value="Prático Sênior">Prático Sênior</option>
-                  <option value="Prático Efetivo">Prático Efetivo</option>
-                  <option value="Praticante de Prático">Praticante de Prático</option>
+                  <option value="Piloto Sênior">Piloto Sênior</option>
+                  <option value="Piloto Efetivo">Piloto Efetivo</option>
+                  <option value="Cadete de Pilotagem">Cadete de Pilotagem</option>
                 </select>
               </div>
 
@@ -474,19 +463,19 @@ export const PilotsView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setIsAddingPilot(false)}
-                  className="px-4 py-2 rounded border-2 border-black font-bold text-xs hover:bg-slate-100"
+                  className="px-3 py-1.5 rounded-md border-2 border-black font-bold text-xs hover:bg-slate-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs border-2 border-black"
+                  className="px-3 py-1.5 rounded-md bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs border-2 border-black"
                 >
-                  Salvar Piloto
+                  Guardar
                 </button>
               </div>
             </form>

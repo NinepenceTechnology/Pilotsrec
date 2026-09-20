@@ -1,0 +1,10 @@
+{
+  "version": "4.0.0",
+  "build": "2026.09.20.400",
+  "releaseDate": "2026-09-20",
+  "timestamp": 1790000000000,
+  "forceUpdate": true,
+  "forceDomains": ["pilotsrec.netlify.app"],
+  "appName": "Pilot's Records",
+  "notes": "Nova versão com botões compactos e sincronização forçada para pilotsrec.netlify.app"
+}

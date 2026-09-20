@@ -126,17 +126,17 @@ export const ManeuverDetailModal: React.FC<ManeuverDetailModalProps> = ({
             <button
               onClick={handleDownloadPdf}
               disabled={isDownloadingPdf}
-              className="px-3.5 py-1.5 rounded-lg bg-black hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 border border-blue-400 transition-colors"
+              className="px-2.5 py-1 rounded-md bg-black hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 border border-blue-400 transition-colors"
             >
-              <Download className="w-4 h-4 text-blue-300" />
+              <Download className="w-3.5 h-3.5 text-blue-300" />
               <span>{isDownloadingPdf ? 'Gerando...' : 'Descarregar PDF'}</span>
             </button>
 
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg bg-black hover:bg-slate-800 text-white flex items-center justify-center transition-colors border border-blue-400"
+              className="w-7 h-7 rounded-md bg-black hover:bg-slate-800 text-white flex items-center justify-center transition-colors border border-blue-400"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -330,9 +330,9 @@ export const ManeuverDetailModal: React.FC<ManeuverDetailModalProps> = ({
                   onClose();
                   onEditManeuver(maneuver);
                 }}
-                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black font-black text-xs rounded-lg border border-black shadow flex items-center justify-center gap-1.5"
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-black text-xs rounded-md border border-black shadow-xs flex items-center justify-center gap-1.5"
               >
-                <Edit3 className="w-4 h-4 text-black" />
+                <Edit3 className="w-3.5 h-3.5 text-black" />
                 <span>Editar Registo</span>
               </button>
             )}
@@ -340,15 +340,15 @@ export const ManeuverDetailModal: React.FC<ManeuverDetailModalProps> = ({
             <button
               onClick={handleDownloadPdf}
               disabled={isDownloadingPdf}
-              className="flex-1 sm:flex-none px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs rounded-lg border border-black shadow flex items-center justify-center gap-1.5"
+              className="flex-1 sm:flex-none px-3 py-1.5 bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs rounded-md border border-black shadow-xs flex items-center justify-center gap-1.5"
             >
-              <Download className="w-4 h-4 text-blue-300" />
+              <Download className="w-3.5 h-3.5 text-blue-300" />
               <span>Certificado PDF</span>
             </button>
 
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-white hover:bg-slate-200 border-2 border-black font-bold text-xs rounded-lg text-black"
+              className="px-3 py-1.5 bg-white hover:bg-slate-200 border-2 border-black font-bold text-xs rounded-md text-black"
             >
               Fechar
             </button>

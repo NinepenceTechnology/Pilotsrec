@@ -2,12 +2,16 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { initVersionSupervisor, checkSoftwareVersion, applySoftwareUpdate, APP_CURRENT_VERSION } from './utils/versionManager.ts';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>,
 );
+
+// Iniciar o supervisor de versão com verificação para pilotsrec.netlify.app
+initVersionSupervisor();
 
 // PWA: Registo e Atualização Automática Forçada quando Online
 if ('serviceWorker' in navigator) {
@@ -16,20 +20,42 @@ if ('serviceWorker' in navigator) {
     const checkServerVersionAndRefresh = async () => {
       if (!navigator.onLine) return;
       try {
-        const res = await fetch(`/api/version?t=${Date.now()}`, { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          const storedVersion = localStorage.getItem('PILOTS_PWA_BUILD_HASH');
-          if (storedVersion && storedVersion !== data.version) {
-            localStorage.setItem('PILOTS_PWA_BUILD_HASH', data.version);
-            // Limpa todas as caches do browser e recarrega imediatamente
-            if ('caches' in window) {
-              const keys = await caches.keys();
-              await Promise.all(keys.map(k => caches.delete(k)));
+        // Tenta primeiro /version.json (Netlify & estático)
+        let newVersion = '';
+        let isForce = false;
+
+        try {
+          const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+          if (res.ok) {
+            const text = await res.text();
+            if (text.trim().startsWith('{')) {
+              const data = JSON.parse(text);
+              newVersion = data.version;
+              isForce = !!data.forceUpdate;
             }
-            window.location.reload();
+          }
+        } catch {}
+
+        if (!newVersion) {
+          try {
+            const res = await fetch(`/api/version?t=${Date.now()}`, { cache: 'no-store' });
+            if (res.ok) {
+              const data = await res.json();
+              newVersion = data.version;
+              isForce = !!data.forceUpdate;
+            }
+          } catch {}
+        }
+
+        if (newVersion) {
+          const storedVersion = localStorage.getItem('PILOTS_PWA_BUILD_HASH');
+          const isNetlify = window.location.hostname.includes('pilotsrec.netlify.app');
+          const netlifyUpdated = localStorage.getItem('PILOTS_NETLIFY_V4_APPLIED') === 'true';
+
+          if ((isNetlify && (!netlifyUpdated || storedVersion !== newVersion)) || (storedVersion && storedVersion !== newVersion) || isForce) {
+            await applySoftwareUpdate();
           } else if (!storedVersion) {
-            localStorage.setItem('PILOTS_PWA_BUILD_HASH', data.version);
+            localStorage.setItem('PILOTS_PWA_BUILD_HASH', newVersion);
           }
         }
       } catch {

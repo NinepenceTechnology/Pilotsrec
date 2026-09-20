@@ -1,5 +1,5 @@
 // Pilot's Records Service Worker - Auto-Update & Suporte Offline para Dispositivos
-const CACHE_NAME = 'pilots-records-v3.4';
+const CACHE_NAME = 'pilots-records-v4.0.0';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -46,8 +46,8 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // Não intercetar chamadas de API
-  if (event.request.url.includes('/api/')) return;
+  // Não intercetar chamadas de API nem checagens de versão
+  if (event.request.url.includes('/api/') || event.request.url.includes('version.json')) return;
 
   // ESTRATÉGIA NETWORK-FIRST PARA NAVEGAÇÃO / HTML:
   // Se estiver online, obtém SEMPRE a versão mais recente do HTML (com novos hashes de bundle).

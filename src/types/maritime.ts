@@ -218,7 +218,7 @@ export interface ManeuverRecord {
 export type AttachmentCategory = 
   | 'photo_vessel'       // Foto do Navio / Costado / Proa / Popa
   | 'photo_maneuver'     // Manobra / Atracação / Rebocadores
-  | 'pilot_slip'         // Bilhete de Praticagem Assinado / Certificado
+  | 'pilot_slip'         // Certificado de Pilotagem Assinado / Timesheet
   | 'draft_survey'       // Folha de Calados / Leituras de Calado
   | 'berth_condition'    // Condição do Berço / Defensas / Cabeços
   | 'checklist_doc'      // Checklist de Segurança / Passagem de Informações
@@ -235,18 +235,17 @@ export interface ManeuverAttachment {
   mimeType: string;
   sizeBytes?: number;
   uploadedAt: string;
-  caption?: string; // Legenda ou anotação do prático
+  caption?: string; // Legenda ou anotação do piloto
 }
 
 export type PilotRank = 
   | 'Piloto Sênior' 
   | 'Piloto Efetivo' 
-  | 'Piloto Praticante' 
+  | 'Cadete de Pilotagem' 
   | 'Piloto em Treinamento' 
   | 'Piloto Chefe / Coordenador'
-  | 'Prático Sênior' 
-  | 'Prático Efetivo' 
-  | 'Praticante de Prático';
+  | 'Cadete / Estagiário'
+  | 'Piloto Aspirante';
 
 export interface UserPilotProfile {
   id: string;
@@ -315,5 +314,16 @@ export interface MaritimeAlert {
   updatedById?: string;       // ID do último utilizador autorizado a editar
   updatedByName?: string;     // Nome do último editor
   updatedDeviceId?: string;   // Dispositivo onde foi feita a última edição
+}
+
+// Mensagem de Chat Local (Validade de 24 Horas)
+export interface MaritimeChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderDeviceId: string;
+  text: string;
+  timestamp: number;       // Date.now()
+  expiresAt: number;       // timestamp + 24 * 60 * 60 * 1000
 }
 

@@ -20,10 +20,26 @@ import { MobilePilotLogView } from './components/MobilePilotLogView';
 import { ManeuverFormModal } from './components/ManeuverFormModal';
 import { ManeuverDetailModal } from './components/ManeuverDetailModal';
 import { PilotRegistrationModal } from './components/PilotRegistrationModal';
+import { EmergencyAlertPopup } from './components/EmergencyAlertPopup';
+import { LocalChatModal } from './components/LocalChatModal';
 import { Vessel, ManeuverRecord } from './types/maritime';
 
 const AppContent: React.FC = () => {
-  const { currentView, setCurrentView, isMobileHudOpen, setIsMobileHudOpen } = useMaritime();
+  const { 
+    currentView, 
+    setCurrentView, 
+    isMobileHudOpen, 
+    setIsMobileHudOpen,
+    activeEmergencyAlert,
+    dismissEmergencyAlert,
+    playAlertSound,
+    chatMessages,
+    isChatOpen,
+    setIsChatOpen,
+    sendChatMessage,
+    currentUser,
+    deviceId
+  } = useMaritime();
 
   // Modals state
   const [isNewManeuverModalOpen, setIsNewManeuverModalOpen] = useState(false);
@@ -179,6 +195,29 @@ const AppContent: React.FC = () => {
 
       {/* Pilot Registration & Profile Gate Modal */}
       <PilotRegistrationModal />
+
+      {/* Emergency Alert Audio & Visual Popup across all devices */}
+      <EmergencyAlertPopup
+        alert={activeEmergencyAlert}
+        onDismiss={dismissEmergencyAlert}
+        onNavigateToAlerts={() => {
+          dismissEmergencyAlert();
+          setCurrentView('alertas');
+        }}
+        onPlaySound={playAlertSound}
+      />
+
+      {/* Local 24-Hour Maritime Chat Modal */}
+      <LocalChatModal
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        messages={chatMessages}
+        onSendMessage={sendChatMessage}
+        currentUserName={currentUser?.name || 'Prático em Serviço'}
+        currentUserId={currentUser?.id || deviceId}
+      />
+
+      {/* Modais do Sistema */}
     </div>
   );
 };

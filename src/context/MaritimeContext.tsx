@@ -11,7 +11,8 @@ import {
   UserPilotProfile,
   PilotRank,
   MaritimeAlert,
-  ManeuverAttachment
+  ManeuverAttachment,
+  MaritimeChatMessage
 } from '../types/maritime';
 import { 
   INITIAL_VESSELS, 
@@ -118,6 +119,26 @@ interface MaritimeContextType {
   toggleAlertActive: (id: string) => void;
   deleteAlert: (id: string) => void;
 
+  // Alerta Pop-Up Emergente & Áudio
+  activeEmergencyAlert: MaritimeAlert | null;
+  dismissEmergencyAlert: () => void;
+  playAlertSound: () => void;
+
+  // Chat Local 24h
+  chatMessages: MaritimeChatMessage[];
+  isChatOpen: boolean;
+  setIsChatOpen: (open: boolean) => void;
+  sendChatMessage: (text: string) => Promise<void>;
+  unreadChatCount: number;
+
+  // Notificação transitória "Atualizado"
+  showUpdatedToast: boolean;
+
+  // Autoria e Permissões
+  canEditManeuver: (record: ManeuverRecord) => boolean;
+  canEditAlert: (alert: MaritimeAlert) => boolean;
+  deviceId: string;
+
   resetAllData: () => void;
   exportManeuversToCsv: () => void;
   exportIncidentsToCsv: () => void;
@@ -139,7 +160,9 @@ const STORAGE_KEYS = {
   DELETED_ALERTS: 'pilots_records_deleted_alerts_v2',
   USER_PROFILE: 'pilots_records_user_profile_v2',
   UNIFIED_BACKUP: 'pilots_records_unified_offline_backup_v2',
-  LAST_UNIFIED_SYNC: 'pilots_records_last_unified_sync_time'
+  LAST_UNIFIED_SYNC: 'pilots_records_last_unified_sync_time',
+  CHAT_MESSAGES: 'pilots_records_chat_24h_v1',
+  DEVICE_ID: 'pilots_records_device_uuid'
 };
 
 const PILOT_BACKUP_PREFIX = 'pilots_records_pilot_backup_v2_';
@@ -483,24 +506,183 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   });
 
-  // Sinal sonoro suave ao receber alerta urgente de outro utilizador/dispositivo
+  // Identificador exclusivo deste dispositivo para controle de autoria
+  const [deviceId] = useState<string>(() => {
+    try {
+      let id = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
+      if (!id) {
+        id = `DEV-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
+        localStorage.setItem(STORAGE_KEYS.DEVICE_ID, id);
+      }
+      return id;
+    } catch {
+      return `DEV-FALLBACK-${Date.now()}`;
+    }
+  });
+
+  // Alerta Pop-Up Emergente na Tela
+  const [activeEmergencyAlert, setActiveEmergencyAlert] = useState<MaritimeAlert | null>(null);
+  const dismissEmergencyAlert = () => setActiveEmergencyAlert(null);
+
+  // Sinal sonoro vigoroso e nítido de alarme marítimo portuário
   const playAlertAudioChime = () => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.3);
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      const now = ctx.currentTime;
+
+      // Primeiro tom de alerta náutico (880 Hz - Nota A5)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.35, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.18);
+
+      // Segundo tom de confirmação (1174.66 Hz - Nota D6)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(1174.66, now + 0.22);
+      gain2.gain.setValueAtTime(0.35, now + 0.22);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.22);
+      osc2.stop(now + 0.45);
     } catch {}
+  };
+
+  // Verificação Silenciosa de Versões Disponíveis do Software (sem exibir mensagens)
+  const checkForSystemUpdates = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      const res = await fetch('/api/system/version', {
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.version) {
+        try {
+          localStorage.setItem('pilots_records_app_version', data.version);
+        } catch {}
+      }
+    } catch {
+      // Execução em segundo plano totalmente silenciosa
+    }
+  };
+
+  // Toast transitório mantido desativado por padrão (silencioso, sem mostrar mensagens de atualização)
+  const [showUpdatedToast, setShowUpdatedToast] = useState<boolean>(false);
+  const toastTimeoutRef = React.useRef<any>(null);
+
+  const triggerUpdatedToast = () => {
+    // Silencioso: Não mostra mensagens de atualização na interface
+    setShowUpdatedToast(false);
+  };
+
+  // Chat Local com mensagens ativas por 24 horas
+  const [chatMessages, setChatMessages] = useState<MaritimeChatMessage[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.CHAT_MESSAGES);
+      if (raw) {
+        const parsed: MaritimeChatMessage[] = JSON.parse(raw);
+        const now = Date.now();
+        const maxAge = 24 * 60 * 60 * 1000;
+        return parsed.filter(m => m && m.timestamp && (now - m.timestamp) < maxAge);
+      }
+    } catch {}
+    return [];
+  });
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
+
+  // Buscar mensagens recentes do servidor
+  const fetchChatMessages = async () => {
+    try {
+      const res = await fetch('/api/shared/chat');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.messages)) {
+          setChatMessages(data.messages);
+          try {
+            localStorage.setItem(STORAGE_KEYS.CHAT_MESSAGES, JSON.stringify(data.messages));
+          } catch {}
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchChatMessages();
+    const interval = setInterval(fetchChatMessages, 8000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const sendChatMessage = async (text: string) => {
+    const clean = text.trim();
+    if (!clean) return;
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000;
+    const newMsg: MaritimeChatMessage = {
+      id: `MSG-${now}-${Math.random().toString(36).substring(2, 7)}`,
+      senderId: currentUser?.id || 'pilot',
+      senderName: currentUser?.name || 'Prático em Serviço',
+      senderDeviceId: deviceId,
+      text: clean,
+      timestamp: now,
+      expiresAt: now + maxAge
+    };
+
+    setChatMessages(prev => {
+      const next = [...prev, newMsg];
+      try { localStorage.setItem(STORAGE_KEYS.CHAT_MESSAGES, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    try {
+      await fetch('/api/shared/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: clean,
+          senderName: currentUser?.name || 'Prático em Serviço',
+          senderId: currentUser?.id || 'pilot',
+          senderDeviceId: deviceId
+        })
+      });
+    } catch {}
+  };
+
+  // Controlo de Permissões: Todos visualizam, mas apenas o criador/dispositivo edita
+  const canEditManeuver = (record: ManeuverRecord): boolean => {
+    if (!record) return false;
+    // Se for registo legado sem autor definido, permite para compatibilidade
+    if (!record.createdById && !record.createdDeviceId && !record.pilotName) return true;
+    // Criado por este dispositivo
+    if (record.createdDeviceId && record.createdDeviceId === deviceId) return true;
+    // Criado por este utilizador
+    if (currentUser && record.createdById && record.createdById === currentUser.id) return true;
+    // Piloto registrado coincide com usuário logado
+    if (currentUser && record.pilotName && normalizePilotKey(record.pilotName) === normalizePilotKey(currentUser.name)) return true;
+    return false;
+  };
+
+  const canEditAlert = (alert: MaritimeAlert): boolean => {
+    if (!alert) return false;
+    if (!alert.createdById && !alert.createdDeviceId && !alert.issuedBy) return true;
+    if (alert.createdDeviceId && alert.createdDeviceId === deviceId) return true;
+    if (currentUser && alert.createdById && alert.createdById === currentUser.id) return true;
+    if (currentUser && alert.issuedBy && alert.issuedBy.toLowerCase().includes(currentUser.name.toLowerCase())) return true;
+    return false;
   };
 
   const [terminals] = useState<PortTerminal[]>(INITIAL_TERMINALS);
@@ -671,6 +853,7 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             version: '2026.unified'
           }));
           localStorage.setItem(STORAGE_KEYS.LAST_UNIFIED_SYNC, new Date().toISOString());
+          // Atualização de dados concluída em segundo plano (silenciosa)
         } catch {}
       }
     } catch (err) {
@@ -815,6 +998,12 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }
               if (Array.isArray(data.payload.alerts)) {
                 setAlerts(prev => {
+                  const prevIds = new Set(prev.map(a => a.id));
+                  const newActiveAlert = data.payload.alerts.find((a: any) => a && a.isActive && !prevIds.has(a.id));
+                  if (newActiveAlert) {
+                    playAlertAudioChime();
+                    setActiveEmergencyAlert(newActiveAlert);
+                  }
                   const a = mergeAlerts(prev, data.payload.alerts, activeDeleted);
                   try { localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(a)); } catch {}
                   return a;
@@ -840,7 +1029,7 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 ...prev,
                 lastSyncTime: nowTime
               }));
-              playAlertAudioChime();
+              // Atualização de dados concluída em segundo plano (silenciosa)
             } else if (data.type === 'ALERT_SYNC' && data.payload) {
               if (data.payload.action === 'DELETE' && data.payload.deletedId) {
                 const delId = data.payload.deletedId;
@@ -863,12 +1052,28 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 setLastSyncTime(new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
                 if (data.payload.action === 'UPSERT') {
                   playAlertAudioChime();
+                  const latest = data.payload.alerts[0];
+                  if (latest && latest.isActive) {
+                    setActiveEmergencyAlert(latest);
+                  }
                 }
+              }
+            } else if (data.type === 'CHAT_MESSAGE' && data.payload?.message) {
+              const incoming = data.payload.message;
+              setChatMessages(prev => {
+                if (prev.some(m => m.id === incoming.id)) return prev;
+                const next = [...prev, incoming];
+                try { localStorage.setItem(STORAGE_KEYS.CHAT_MESSAGES, JSON.stringify(next)); } catch {}
+                return next;
+              });
+              if (!isChatOpen) {
+                setUnreadChatCount(c => c + 1);
               }
             } else if (data.type === 'MANEUVER_SYNC' && data.payload) {
               if (Array.isArray(data.payload.maneuvers)) {
                 setManeuvers(prev => mergeManeuvers(prev, data.payload.maneuvers));
               }
+              triggerUpdatedToast();
             } else if (data.type === 'PING') {
               setIsRealtimeConnected(true);
               if (data.activeClients) setActiveSyncDevices(data.activeClients);
@@ -898,22 +1103,26 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  // 2. Sincronização Inicial, Polling Unificado & BroadcastChannel Inter-Abas
+  // 2. Sincronização Inicial, Polling a cada 10 Minutos & Busca de Versões Disponíveis (Silenciosa)
   useEffect(() => {
-    // Sincronização unificada inicial
+    // Sincronização e verificação inicial silenciosa
     syncUnifiedDatabase('push_pull');
+    checkForSystemUpdates();
 
-    // Polling a cada 5 segundos para garantir atualização entre todos os dispositivos
+    // Polling estrito de 10 em 10 minutos (10 * 60 * 1000 ms) para dados de todos os usuários online e versões
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
     const intervalId = setInterval(() => {
       if (typeof navigator === 'undefined' || navigator.onLine) {
         syncUnifiedDatabase('push_pull');
+        checkForSystemUpdates();
       }
-    }, 5000);
+    }, TEN_MINUTES_MS);
 
-    // Sincronização ao voltar o foco ou reconectar internet
+    // Sincronização silenciosa ao voltar o foco ou reconectar à rede
     const handleSyncTrigger = () => {
       setIsOnline(navigator.onLine);
       syncUnifiedDatabase('push_pull');
+      checkForSystemUpdates();
     };
 
     const handleOffline = () => {
@@ -952,6 +1161,10 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (Array.isArray(payload.vessels)) setVessels(prev => mergeVessels(prev, payload.vessels));
           if (Array.isArray(payload.pilots)) setPilots(prev => mergePilots(prev, payload.pilots));
         } else if (type === 'ALERT_UPSERT' && payload) {
+          playAlertAudioChime();
+          if (payload.isActive) {
+            setActiveEmergencyAlert(payload);
+          }
           setAlerts(prev => {
             const next = [payload, ...prev.filter(a => a.id !== payload.id)];
             try {
@@ -1034,7 +1247,13 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       id: newId,
       scheduledTime: recordedScheduledTime,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      createdById: currentUser?.id,
+      createdByName: currentUser?.name || maneuverData.pilotName,
+      createdDeviceId: deviceId,
+      updatedById: currentUser?.id,
+      updatedByName: currentUser?.name || maneuverData.pilotName,
+      updatedDeviceId: deviceId
     };
 
     setManeuvers(prev => [newManeuver, ...prev]);
@@ -1077,7 +1296,10 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ...updates,
           milestones: mergedMilestones,
           createdAt: m.createdAt, // strictly lock creation time
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          updatedById: currentUser?.id || m.updatedById,
+          updatedByName: currentUser?.name || m.updatedByName,
+          updatedDeviceId: deviceId
         };
         return updatedItem;
       }
@@ -1645,7 +1867,13 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ...alertData,
       id,
       issuedAt: nowIso,
-      updatedAt: nowIso
+      updatedAt: nowIso,
+      createdById: currentUser?.id,
+      createdByName: currentUser?.name || alertData.issuedBy,
+      createdDeviceId: deviceId,
+      updatedById: currentUser?.id,
+      updatedByName: currentUser?.name || alertData.issuedBy,
+      updatedDeviceId: deviceId
     };
 
     setDeletedAlertIds(prev => {
@@ -1661,6 +1889,12 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       } catch {}
       return updated;
     });
+
+    // Emissão de alarme sonoro e pop-up imediato na interface
+    playAlertAudioChime();
+    if (newAlert.isActive) {
+      setActiveEmergencyAlert(newAlert);
+    }
 
     // Server & Broadcast Synchronization
     broadcastSharedEvent('ALERT_UPSERT', newAlert);
@@ -1696,7 +1930,14 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setAlerts(prev => {
       const next = prev.map(a => {
         if (a.id === id) {
-          updatedItem = { ...a, ...updates, updatedAt: nowIso };
+          updatedItem = {
+            ...a,
+            ...updates,
+            updatedAt: nowIso,
+            updatedById: currentUser?.id || a.updatedById,
+            updatedByName: currentUser?.name || a.updatedByName,
+            updatedDeviceId: deviceId
+          };
           return updatedItem;
         }
         return a;
@@ -1924,7 +2165,19 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         isUnifiedSyncing,
         unifiedSyncStats,
         syncUnifiedDatabaseNow,
-        exportUnifiedDatabaseBackup
+        exportUnifiedDatabaseBackup,
+        activeEmergencyAlert,
+        dismissEmergencyAlert,
+        playAlertSound: playAlertAudioChime,
+        chatMessages,
+        isChatOpen,
+        setIsChatOpen,
+        sendChatMessage,
+        unreadChatCount,
+        showUpdatedToast,
+        canEditManeuver,
+        canEditAlert,
+        deviceId
       }}
     >
       {children}

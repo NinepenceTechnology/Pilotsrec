@@ -33,11 +33,11 @@ export interface AttachmentCategoryMeta {
 export const ATTACHMENT_CATEGORIES: AttachmentCategoryMeta[] = [
   {
     key: 'pilot_slip',
-    label: 'Bilhete de Praticagem Assinado (Timesheet / Slip)',
-    shortLabel: 'Bilhete de Praticagem',
+    label: 'Certificado de Pilotagem Assinado (Timesheet / Slip)',
+    shortLabel: 'Certificado de Pilotagem',
     icon: <FileCheck className="w-3.5 h-3.5 text-blue-700" />,
     badgeClass: 'bg-blue-100 text-blue-900 border-blue-300',
-    description: 'Comprovativo assinado pelo Comandante com horários operacionais'
+    description: 'Comprovativo assinado com horários operacionais'
   },
   {
     key: 'draft_survey',
@@ -45,7 +45,7 @@ export const ATTACHMENT_CATEGORIES: AttachmentCategoryMeta[] = [
     shortLabel: 'Folha de Calados',
     icon: <Ruler className="w-3.5 h-3.5 text-cyan-700" />,
     badgeClass: 'bg-cyan-100 text-cyan-900 border-cyan-300',
-    description: 'Marcas de calado avistadas à proa, meia-nau e popa'
+    description: 'Marcas de calado à proa, meia-nau e popa'
   },
   {
     key: 'photo_vessel',
@@ -53,7 +53,7 @@ export const ATTACHMENT_CATEGORIES: AttachmentCategoryMeta[] = [
     shortLabel: 'Foto do Navio',
     icon: <Ship className="w-3.5 h-3.5 text-emerald-700" />,
     badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-    description: 'Identificação visual, costado, escada de prático ou estado do casco'
+    description: 'Identificação visual, costado, escada de piloto ou casco'
   },
   {
     key: 'photo_maneuver',
@@ -61,7 +61,7 @@ export const ATTACHMENT_CATEGORIES: AttachmentCategoryMeta[] = [
     shortLabel: 'Manobra / Rebocadores',
     icon: <Anchor className="w-3.5 h-3.5 text-indigo-700" />,
     badgeClass: 'bg-indigo-100 text-indigo-900 border-indigo-300',
-    description: 'Rebocadores passados, posicionamento e aproximação ao berço'
+    description: 'Rebocadores e aproximação ao berço'
   },
   {
     key: 'berth_condition',
@@ -69,7 +69,7 @@ export const ATTACHMENT_CATEGORIES: AttachmentCategoryMeta[] = [
     shortLabel: 'Condição do Berço',
     icon: <FileText className="w-3.5 h-3.5 text-amber-700" />,
     badgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
-    description: 'Estado das defensas, cabeços de amarração ou restrições de cais'
+    description: 'Defensas, cabeços ou cais'
   },
   {
     key: 'checklist_doc',
@@ -77,7 +77,7 @@ export const ATTACHMENT_CATEGORIES: AttachmentCategoryMeta[] = [
     shortLabel: 'Checklist / MPX',
     icon: <Check className="w-3.5 h-3.5 text-teal-700" />,
     badgeClass: 'bg-teal-100 text-teal-900 border-teal-300',
-    description: 'Formulário MPX, teste de máquinas e leme preenchido a bordo'
+    description: 'Formulário MPX e testes a bordo'
   },
   {
     key: 'incident_report',
@@ -85,7 +85,7 @@ export const ATTACHMENT_CATEGORIES: AttachmentCategoryMeta[] = [
     shortLabel: 'Avaria / Ocorrência',
     icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-700" />,
     badgeClass: 'bg-rose-100 text-rose-900 border-rose-300',
-    description: 'Registo fotográfico de cabo partido, avaria ou avistamento relevante'
+    description: 'Registo de avaria, cabo partido ou ocorrência'
   },
   {
     key: 'weather_radar',
@@ -93,7 +93,7 @@ export const ATTACHMENT_CATEGORIES: AttachmentCategoryMeta[] = [
     shortLabel: 'Meteorologia / Carta',
     icon: <CloudRain className="w-3.5 h-3.5 text-purple-700" />,
     badgeClass: 'bg-purple-100 text-purple-900 border-purple-300',
-    description: 'Imagem de radar, previsão de ventos, rajadas ou carta local'
+    description: 'Boletim meteorológico ou radar'
   },
   {
     key: 'other_doc',
@@ -101,7 +101,7 @@ export const ATTACHMENT_CATEGORIES: AttachmentCategoryMeta[] = [
     shortLabel: 'Outro Documento',
     icon: <Paperclip className="w-3.5 h-3.5 text-slate-700" />,
     badgeClass: 'bg-slate-100 text-slate-800 border-slate-300',
-    description: 'Qualquer outro comprovativo ou nota relevante da faina'
+    description: 'Outro comprovativo da faina'
   }
 ];
 
@@ -144,55 +144,66 @@ export const AttachmentManager: React.FC<AttachmentManagerProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const processFiles = (files: FileList | File[], defaultCategory: AttachmentCategory) => {
+  const processFiles = async (files: FileList | File[], defaultCategory: AttachmentCategory) => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
-    let addedCount = 0;
-    fileArray.forEach((file) => {
+    const validFiles = fileArray.filter(file => {
       const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
       const isImage = file.type.startsWith('image/');
-
-      if (!isPdf && !isImage) {
-        setStatusMessage(`Aviso: O ficheiro "${file.name}" não é imagem nem PDF.`);
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target?.result as string;
-        if (!dataUrl) return;
-
-        // Deduzir categoria a partir do nome do arquivo se relevante
-        let guessedCategory = defaultCategory;
-        const lower = file.name.toLowerCase();
-        if (lower.includes('calado') || lower.includes('draft')) guessedCategory = 'draft_survey';
-        else if (lower.includes('bilhete') || lower.includes('slip') || lower.includes('ticket')) guessedCategory = 'pilot_slip';
-        else if (lower.includes('avaria') || lower.includes('dano') || lower.includes('incidente')) guessedCategory = 'incident_report';
-        else if (lower.includes('mpx') || lower.includes('checklist')) guessedCategory = 'checklist_doc';
-        else if (lower.includes('berco') || lower.includes('cais') || lower.includes('defensa')) guessedCategory = 'berth_condition';
-        else if (lower.includes('rebocador') || lower.includes('tug')) guessedCategory = 'photo_maneuver';
-        else if (lower.includes('navio') || lower.includes('vessel') || lower.includes('ship')) guessedCategory = 'photo_vessel';
-
-        const newAttachment: ManeuverAttachment = {
-          id: `ATT-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          name: file.name,
-          category: guessedCategory,
-          dataUrl,
-          fileType: isPdf ? 'pdf' : 'image',
-          mimeType: file.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
-          sizeBytes: file.size,
-          uploadedAt: new Date().toISOString(),
-          caption: ''
-        };
-
-        onChange([...attachments, newAttachment]);
-        addedCount++;
-        setStatusMessage(`Anexo "${file.name}" adicionado com sucesso!`);
-      };
-
-      reader.readAsDataURL(file);
+      return isPdf || isImage;
     });
+
+    if (validFiles.length === 0) {
+      setStatusMessage('Aviso: Os ficheiros selecionados não são imagens nem PDFs.');
+      return;
+    }
+
+    const readFileAsDataUrl = (file: File): Promise<ManeuverAttachment> => {
+      return new Promise((resolve, reject) => {
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const dataUrl = e.target?.result as string;
+          if (!dataUrl) {
+            reject(new Error('Falha ao ler o ficheiro'));
+            return;
+          }
+
+          let guessedCategory = defaultCategory;
+          const lower = file.name.toLowerCase();
+          if (lower.includes('calado') || lower.includes('draft')) guessedCategory = 'draft_survey';
+          else if (lower.includes('bilhete') || lower.includes('slip') || lower.includes('ticket')) guessedCategory = 'pilot_slip';
+          else if (lower.includes('avaria') || lower.includes('dano') || lower.includes('incidente')) guessedCategory = 'incident_report';
+          else if (lower.includes('mpx') || lower.includes('checklist')) guessedCategory = 'checklist_doc';
+          else if (lower.includes('berco') || lower.includes('cais') || lower.includes('defensa')) guessedCategory = 'berth_condition';
+          else if (lower.includes('rebocador') || lower.includes('tug')) guessedCategory = 'photo_maneuver';
+          else if (lower.includes('navio') || lower.includes('vessel') || lower.includes('ship')) guessedCategory = 'photo_vessel';
+
+          resolve({
+            id: `ATT-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            name: file.name,
+            category: guessedCategory,
+            dataUrl,
+            fileType: isPdf ? 'pdf' : 'image',
+            mimeType: file.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
+            sizeBytes: file.size,
+            uploadedAt: new Date().toISOString(),
+            caption: ''
+          });
+        };
+        reader.onerror = () => reject(new Error('Erro na leitura'));
+        reader.readAsDataURL(file);
+      });
+    };
+
+    try {
+      const newItems = await Promise.all(validFiles.map(readFileAsDataUrl));
+      onChange([...attachments, ...newItems]);
+      setStatusMessage(`${newItems.length} documento(s) anexado(s) com sucesso (Fotos/PDFs).`);
+    } catch (err) {
+      console.error('Erro ao ler documentos:', err);
+    }
   };
 
   const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -371,74 +382,53 @@ export const AttachmentManager: React.FC<AttachmentManagerProps> = ({
             className="hidden"
           />
 
-          {/* Action Buttons Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {/* Opção 1: Tirar foto pela Câmera */}
+          {/* Action Buttons Grid - Compacto e direto */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => cameraInputRef.current?.click()}
-              className="p-3 bg-white hover:bg-blue-50 text-blue-950 border-2 border-black rounded-lg font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-95 group"
+              className="px-3 py-1.5 bg-white hover:bg-blue-50 text-blue-950 border-2 border-black rounded-md font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-transform active:scale-95"
             >
-              <div className="p-1.5 rounded-md bg-blue-100 text-blue-900 group-hover:bg-blue-200">
-                <Camera className="w-4 h-4" />
-              </div>
-              <div className="text-left">
-                <div className="font-black">1. Tirar Foto (Câmera)</div>
-                <div className="text-[10px] text-slate-500 font-normal">Captura ao vivo no navio/cais</div>
-              </div>
+              <Camera className="w-4 h-4 text-blue-900" />
+              <span>Câmara</span>
             </button>
 
-            {/* Opção 2: Carregar Ficheiros do Dispositivo */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-3 bg-white hover:bg-emerald-50 text-emerald-950 border-2 border-black rounded-lg font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-95 group"
+              className="px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-950 border-2 border-black rounded-md font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-transform active:scale-95"
             >
-              <div className="p-1.5 rounded-md bg-emerald-100 text-emerald-900 group-hover:bg-emerald-200">
-                <Upload className="w-4 h-4" />
-              </div>
-              <div className="text-left">
-                <div className="font-black">2. Carregar Ficheiros</div>
-                <div className="text-[10px] text-slate-500 font-normal">Fotos (JPG/PNG) ou PDFs</div>
-              </div>
+              <Upload className="w-4 h-4 text-emerald-900" />
+              <span>Ficheiros (Fotos / PDFs)</span>
             </button>
 
-            {/* Opção 3: Colar da Área de Transferência */}
             <button
               type="button"
               onClick={handlePasteFromClipboard}
-              className="p-3 bg-white hover:bg-amber-50 text-amber-950 border-2 border-black rounded-lg font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-95 group"
+              className="px-3 py-1.5 bg-white hover:bg-amber-50 text-amber-950 border-2 border-black rounded-md font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-transform active:scale-95"
             >
-              <div className="p-1.5 rounded-md bg-amber-100 text-amber-900 group-hover:bg-amber-200">
-                <Clipboard className="w-4 h-4" />
-              </div>
-              <div className="text-left">
-                <div className="font-black">3. Colar Imagem (Ctrl+V)</div>
-                <div className="text-[10px] text-slate-500 font-normal">PrintScreen / Área de Transferência</div>
-              </div>
+              <Clipboard className="w-4 h-4 text-amber-900" />
+              <span>Colar (Ctrl+V)</span>
             </button>
           </div>
 
-          {/* Drag & Drop Zone */}
+          {/* Drag & Drop Zone Compacta */}
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors ${
+            className={`border-2 border-dashed rounded-lg p-2.5 text-center cursor-pointer transition-colors ${
               isDragOver 
-                ? 'border-blue-700 bg-blue-100/70 text-blue-900 scale-[1.01]' 
-                : 'border-slate-400 bg-white hover:bg-slate-50 text-slate-600'
+                ? 'border-blue-700 bg-blue-100/70 text-blue-900' 
+                : 'border-slate-400 bg-white hover:bg-slate-50 text-slate-700'
             }`}
           >
-            <div className="flex flex-col items-center justify-center gap-1.5">
-              <Plus className="w-5 h-5 text-blue-800" />
-              <p className="text-xs font-bold text-black">
-                Arraste ficheiros para aqui ou clique para selecionar múltiplos anexos
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Suporta: Fotografias de calado, bilhete assinado, avarias, radar meteorológico e relatórios em PDF
-              </p>
+            <div className="flex items-center justify-center gap-1.5">
+              <Plus className="w-4 h-4 text-blue-800" />
+              <span className="text-xs font-bold text-black">
+                Arraste ficheiros ou clique para selecionar anexos
+              </span>
             </div>
           </div>
         </div>
