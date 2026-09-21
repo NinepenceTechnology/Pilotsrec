@@ -33,7 +33,10 @@ export const VersionUpdateButton: React.FC<VersionUpdateButtonProps> = ({ classN
     if (versionInfo.hasUpdate) {
       setIsUpdatingNow(true);
       setFeedback('A actualizar...');
-      await applySoftwareUpdate();
+      try {
+        sessionStorage.setItem('PILOTS_MANUAL_UPDATE_TRIGGERED', 'true');
+      } catch {}
+      await applySoftwareUpdate(true);
       return;
     }
 

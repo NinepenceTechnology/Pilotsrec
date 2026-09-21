@@ -13,112 +13,51 @@ createRoot(document.getElementById('root')!).render(
 // Iniciar o supervisor de versão com verificação para pilotsrec.netlify.app
 initVersionSupervisor();
 
-// PWA: Registo e Atualização Automática Forçada quando Online
+// PWA: Registo e Atualização Segura do Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // Verificação de versão do servidor para forçar atualização em tempo real
-    const checkServerVersionAndRefresh = async () => {
-      if (!navigator.onLine) return;
-      try {
-        // Tenta primeiro /version.json (Netlify & estático)
-        let newVersion = '';
-        let isForce = false;
-
-        try {
-          const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
-          if (res.ok) {
-            const text = await res.text();
-            if (text.trim().startsWith('{')) {
-              const data = JSON.parse(text);
-              newVersion = data.version;
-              isForce = !!data.forceUpdate;
-            }
-          }
-        } catch {}
-
-        if (!newVersion) {
-          try {
-            const res = await fetch(`/api/version?t=${Date.now()}`, { cache: 'no-store' });
-            if (res.ok) {
-              const data = await res.json();
-              newVersion = data.version;
-              isForce = !!data.forceUpdate;
-            }
-          } catch {}
-        }
-
-        if (newVersion) {
-          const storedVersion = localStorage.getItem('PILOTS_PWA_BUILD_HASH');
-          const isNetlify = window.location.hostname.includes('pilotsrec.netlify.app');
-          const netlifyUpdated = localStorage.getItem('PILOTS_NETLIFY_V4_APPLIED') === 'true';
-
-          if ((isNetlify && (!netlifyUpdated || storedVersion !== newVersion)) || (storedVersion && storedVersion !== newVersion) || isForce) {
-            await applySoftwareUpdate();
-          } else if (!storedVersion) {
-            localStorage.setItem('PILOTS_PWA_BUILD_HASH', newVersion);
-          }
-        }
-      } catch {
-        // Ignorar se falhar em modo offline
-      }
-    };
-
     navigator.serviceWorker
       .register('/sw.js', { updateViaCache: 'none' })
       .then((registration) => {
-        // 1. Forçar verificação de nova versão imediatamente ao carregar se estiver online
-        if (navigator.onLine) {
-          registration.update().catch(() => {});
-          checkServerVersionAndRefresh();
-        }
-
-        // 2. Se já existir um worker à espera, força-o a ativar imediatamente
+        // Se já existir um worker à espera e o utilizador ainda não tiver sido notificado
         if (registration.waiting) {
           registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
 
-        // 3. Quando for detetada uma nova versão sendo instalada
+        // Quando for detetada uma nova versão sendo instalada
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                // Notifica que há nova versão para atualização manual segura
+                checkSoftwareVersion();
               }
             });
           }
         });
 
-        // 4. Verificar periodicamente se há nova versão quando online (a cada 15 segundos)
+        // Verificação silenciosa periódica da cache do Service Worker (a cada 30 minutos)
         setInterval(() => {
           if (navigator.onLine) {
             registration.update().catch(() => {});
-            checkServerVersionAndRefresh();
           }
-        }, 15000);
-
-        // 5. Verificar atualização sempre que a aplicação ganha foco ou reconecta à internet
-        document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible' && navigator.onLine) {
-            registration.update().catch(() => {});
-            checkServerVersionAndRefresh();
-          }
-        });
-
-        window.addEventListener('online', () => {
-          registration.update().catch(() => {});
-          checkServerVersionAndRefresh();
-        });
+        }, 30 * 60 * 1000);
       })
       .catch((error) => {
         console.error('Erro ao registar Service Worker:', error);
       });
 
-    // 6. Quando o novo Service Worker assume o controlo, recarrega a página automaticamente para a nova versão
+    // Recarregamento seguro com proteção rigorosa anti-loop
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) {
+      // Apenas recarrega se o recarregamento tiver sido solicitado explicitamente e com cooldown de 1 minuto
+      const lastSwReload = parseInt(sessionStorage.getItem('PILOTS_SW_RELOAD_TIME') || '0', 10);
+      const isManualUpdate = sessionStorage.getItem('PILOTS_MANUAL_UPDATE_TRIGGERED') === 'true';
+      if (!refreshing && isManualUpdate && Date.now() - lastSwReload > 60000) {
         refreshing = true;
+        sessionStorage.removeItem('PILOTS_MANUAL_UPDATE_TRIGGERED');
+        sessionStorage.setItem('PILOTS_SW_RELOAD_TIME', Date.now().toString());
         window.location.reload();
       }
     });

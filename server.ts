@@ -694,9 +694,9 @@ app.get('/api/shared/events', (req, res) => {
   });
 });
 
-app.get('/api/version', (req, res) => {
+app.get(['/api/version', '/api/system/version'], (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.json({ version: '4.0.0', forceUpdate: true, timestamp: Date.now() });
+  res.json({ version: '4.0.0', forceUpdate: false, timestamp: Date.now() });
 });
 
 // Vite or Static assets serving

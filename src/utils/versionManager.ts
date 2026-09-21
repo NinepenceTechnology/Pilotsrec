@@ -46,12 +46,28 @@ export const subscribeToVersionChanges = (listener: VersionListener) => {
 /**
  * Limpa todos os caches locais e força o recarregamento com a nova versão
  */
-export const applySoftwareUpdate = async () => {
+export const applySoftwareUpdate = async (isManual = true) => {
+  // Proteção contra loops de recarregamento contínuo
+  const lastReload = parseInt(sessionStorage.getItem('PILOTS_LAST_RELOAD_TIME') || '0', 10);
+  const now = Date.now();
+  if (!isManual && now - lastReload < 60000) {
+    console.warn('Proteção de ciclo ativa: recarregamento automático ignorado para evitar loops.');
+    return;
+  }
+  sessionStorage.setItem('PILOTS_LAST_RELOAD_TIME', now.toString());
+
   try {
     currentState.isChecking = true;
     notifyListeners();
 
-    // 1. Limpar todo o Cache Storage (Service Worker caches)
+    // 1. Atualizar carimbo local de versão antes de limpar
+    const targetVersion = currentState.latestVersion || APP_CURRENT_VERSION;
+    localStorage.setItem('PILOTS_PWA_BUILD_HASH', targetVersion);
+    localStorage.setItem('PILOTS_APP_VERSION', targetVersion);
+    localStorage.setItem('PILOTS_NETLIFY_V4_APPLIED', 'true');
+    localStorage.setItem('PILOTS_LAST_UPDATE_TIME', now.toString());
+
+    // 2. Limpar todo o Cache Storage (Service Worker caches)
     if ('caches' in window) {
       try {
         const cacheKeys = await caches.keys();
@@ -61,7 +77,7 @@ export const applySoftwareUpdate = async () => {
       }
     }
 
-    // 2. Notificar e atualizar Service Workers
+    // 3. Notificar e atualizar Service Workers
     if ('serviceWorker' in navigator) {
       try {
         const registrations = await navigator.serviceWorker.getRegistrations();
@@ -76,15 +92,9 @@ export const applySoftwareUpdate = async () => {
       }
     }
 
-    // 3. Atualizar carimbo local de versão
-    localStorage.setItem('PILOTS_PWA_BUILD_HASH', currentState.latestVersion || APP_CURRENT_VERSION);
-    localStorage.setItem('PILOTS_APP_VERSION', currentState.latestVersion || APP_CURRENT_VERSION);
-    localStorage.setItem('PILOTS_NETLIFY_V4_APPLIED', 'true');
-    localStorage.setItem('PILOTS_LAST_UPDATE_TIME', Date.now().toString());
-
     // 4. Recarregar a página forçando bypass de cache
     const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('v', Date.now().toString());
+    currentUrl.searchParams.set('v', now.toString());
     window.location.replace(currentUrl.toString());
   } catch (err) {
     console.error('Falha ao aplicar atualização:', err);
@@ -127,7 +137,7 @@ export const checkSoftwareVersion = async (manualTrigger = false): Promise<boole
     // Tentativa 2: Fallback para /api/system/version ou /api/version caso /version.json não responda
     if (!remoteData) {
       try {
-        const resApi = await fetch(`/api/system/version?t=${Date.now()}`, {
+        const resApi = await fetch(`/api/version?t=${Date.now()}`, {
           cache: 'no-store'
         });
         if (resApi.ok) {
@@ -140,36 +150,24 @@ export const checkSoftwareVersion = async (manualTrigger = false): Promise<boole
 
     if (remoteData && remoteData.version) {
       currentState.latestVersion = remoteData.version;
-      const isNetlify = window.location.hostname.includes('pilotsrec.netlify.app');
-      const netlifyApplied = localStorage.getItem('PILOTS_NETLIFY_V4_APPLIED') === 'true';
       const storedVersion = localStorage.getItem('PILOTS_APP_VERSION');
 
-      const isDifferentVersion = remoteData.version !== APP_CURRENT_VERSION || storedVersion !== remoteData.version;
-      const shouldForceNetlify = isNetlify && (!netlifyApplied || isDifferentVersion || remoteData.forceUpdate);
-      const shouldForceGeneral = remoteData.forceUpdate && isDifferentVersion;
+      // Só há atualização se a versão remota for comprovadamente diferente da versão atualmente em execução
+      const isDifferentVersion = remoteData.version !== APP_CURRENT_VERSION;
 
-      if (shouldForceNetlify || shouldForceGeneral) {
+      if (isDifferentVersion) {
         currentState.hasUpdate = true;
-        currentState.forceUpdate = true;
-        currentState.message = `Nova versão ${remoteData.version} disponível. A atualizar...`;
-        notifyListeners();
-
-        // Se estiver em pilotsrec.netlify.app e a atualização for forçada, aplicar de imediato
-        if (shouldForceNetlify) {
-          console.info('Aplicando atualização forçada para pilotsrec.netlify.app...');
-          setTimeout(() => {
-            applySoftwareUpdate();
-          }, 800);
-          return true;
-        }
-      } else if (isDifferentVersion) {
-        currentState.hasUpdate = true;
-        currentState.message = `Nova versão ${remoteData.version} disponível`;
+        currentState.forceUpdate = !!remoteData.forceUpdate;
+        currentState.message = `Nova versão ${remoteData.version} disponível.`;
         notifyListeners();
         return true;
       } else {
         currentState.hasUpdate = false;
+        currentState.forceUpdate = false;
         currentState.message = 'Sistema atualizado';
+        if (!storedVersion) {
+          localStorage.setItem('PILOTS_APP_VERSION', APP_CURRENT_VERSION);
+        }
         notifyListeners();
       }
     }
@@ -187,27 +185,32 @@ export const checkSoftwareVersion = async (manualTrigger = false): Promise<boole
  * Inicializador automático para ser chamado na montagem da app
  */
 export const initVersionSupervisor = () => {
-  // Executar checagem imediata
-  checkSoftwareVersion();
-
-  // Se estiver especificamente em pilotsrec.netlify.app, verificar de imediato a flag de versão 4
-  if (window.location.hostname.includes('pilotsrec.netlify.app')) {
-    const netlifyUpdated = localStorage.getItem('PILOTS_NETLIFY_V4_APPLIED');
-    if (!netlifyUpdated) {
-      // Primeira execução na v4 para forçar purga de caches antigas da netlify
-      applySoftwareUpdate();
-      return;
+  // Inicializar carimbo local para evitar loops na primeira execução
+  try {
+    if (!localStorage.getItem('PILOTS_APP_VERSION')) {
+      localStorage.setItem('PILOTS_APP_VERSION', APP_CURRENT_VERSION);
     }
-  }
+    if (!localStorage.getItem('PILOTS_NETLIFY_V4_APPLIED')) {
+      localStorage.setItem('PILOTS_NETLIFY_V4_APPLIED', 'true');
+    }
+  } catch {}
 
-  // Verificar periodicamente a cada 20 segundos
+  // Executar checagem de versão inicial após 3 segundos da inicialização (para não concorrer com carregamento inicial)
+  setTimeout(() => {
+    if (navigator.onLine) {
+      checkSoftwareVersion();
+    }
+  }, 3000);
+
+  // Verificar periodicamente a cada 5 minutos (em vez de loops agressivos de segundos)
+  const FIVE_MINUTES = 5 * 60 * 1000;
   const interval = setInterval(() => {
     if (navigator.onLine) {
       checkSoftwareVersion();
     }
-  }, 20000);
+  }, FIVE_MINUTES);
 
-  // Verificar quando a aba volta a ficar visível ou reconecta à rede
+  // Verificar quando a aba volta a ficar visível
   const handleVisibility = () => {
     if (document.visibilityState === 'visible' && navigator.onLine) {
       checkSoftwareVersion();
