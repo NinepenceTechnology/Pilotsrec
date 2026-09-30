@@ -70,8 +70,20 @@ export const formatManeuverStatus = (status: ManeuverStatus): { label: string; c
 
 export const formatDateTime = (isoString?: string): string => {
   if (!isoString) return '--';
+  // Parse directly to preserve user-entered hours strictly without timezone shifting
+  const match = isoString.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s+)(\d{2}):(\d{2})/);
+  if (match) {
+    const [, y, m, d, hh, mm] = match;
+    return `${d}/${m}/${y}, ${hh}:${mm}`;
+  }
+  const dateOnly = isoString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const [, y, m, d] = dateOnly;
+    return `${d}/${m}/${y}`;
+  }
   try {
     const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
     return d.toLocaleString('pt-PT', {
       day: '2-digit',
       month: '2-digit',
@@ -86,13 +98,23 @@ export const formatDateTime = (isoString?: string): string => {
 
 export const formatTimeOnly = (isoString?: string): string => {
   if (!isoString) return '--:--';
-  try {
-    const d = new Date(isoString);
-    return d.toLocaleTimeString('pt-PT', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch {
-    return isoString;
+  const match = isoString.match(/(?:T|\s+)(\d{2}):(\d{2})/);
+  if (match) {
+    return `${match[1]}:${match[2]}`;
   }
+  const timeOnly = isoString.match(/^(\d{2}):(\d{2})/);
+  if (timeOnly) {
+    return `${timeOnly[1]}:${timeOnly[2]}`;
+  }
+  return isoString;
+};
+
+export const formatDateOnly = (isoString?: string): string => {
+  if (!isoString) return '--/--/----';
+  const match = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, y, m, d] = match;
+    return `${d}/${m}/${y}`;
+  }
+  return isoString;
 };

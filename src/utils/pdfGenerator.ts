@@ -113,10 +113,10 @@ export async function generatePilotageManeuverPDF(
   const isDesatracacao = record.maneuverType === 'desatracacao';
   const tipoLabel = (record.maneuverType || 'ATRACAÇÃO').toUpperCase();
   const modeloAtracacao = record.berthingModel || 'Costado Bombordo (BB)';
-  const primeiroCabo = record.firstLineAshored || record.milestones.firstLineAshored || 'N/A';
-  const desatracacao = record.unmooringTime || record.milestones.commenceManeuver || 'N/A';
-  const atracacao = record.berthingTime || record.milestones.allFastCompleted || record.scheduledTime || 'N/A';
-  const tempoManobra = record.maneuverDurationFormatted || `${record.durationMinutes || 75} minutos`;
+  const primeiroCabo = record.firstLineAshored || record.milestones?.firstLineAshored || 'N/A';
+  const desatracacao = record.unmooringTime || record.lastLineCastOffTime || record.milestones?.lastLineCastOff || record.milestones?.commenceManeuver || 'N/A';
+  const atracacao = record.berthingTime || record.allFastBerthingTime || record.milestones?.allFastCompleted || 'N/A';
+  const tempoManobra = record.maneuverDurationFormatted || (record.durationMinutes ? `${record.durationMinutes} minutos` : 'N/A');
 
   const maneuverData = [
     [
@@ -167,11 +167,11 @@ export async function generatePilotageManeuverPDF(
 
   currentY += 10;
 
-  const numTugs = record.tugCount !== undefined ? record.tugCount : (record.tugs?.length || 2);
+  const numTugs = record.tugCount !== undefined ? record.tugCount : (record.tugs?.length || 0);
   const timings = record.tugTimings || {
-    arranque: '13:10',
-    inicio: '13:30',
-    fim: '14:45'
+    arranque: record.tugsMadeFastTime || 'N/A',
+    inicio: record.tugsMadeFastTime || 'N/A',
+    fim: record.tugsDismissedTime || 'N/A'
   };
 
   const tugGrid = [

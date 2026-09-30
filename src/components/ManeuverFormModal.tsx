@@ -90,8 +90,15 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
   // Data da Manobra (Permite registo e alteração retroativa)
   const [maneuverDate, setManeuverDate] = useState<string>(() => {
     if (editManeuver?.maneuverDate) return editManeuver.maneuverDate;
-    if (editManeuver?.scheduledTime) return editManeuver.scheduledTime.slice(0, 10);
-    return new Date().toISOString().slice(0, 10);
+    if (editManeuver?.scheduledTime) {
+      const match = editManeuver.scheduledTime.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (match) return match[1];
+    }
+    const d = new Date();
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${day}`;
   });
 
   // 2. HORÁRIOS OPERACIONAIS (ATRACAÇÃO, MUDANÇA, PUXANÇA, DESATRACAÇÃO)
@@ -429,9 +436,9 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
           const onlineResults = await fetchVesselFinderOnline(q);
           if (onlineResults && onlineResults.length > 0) {
             setSuggestions(prev => {
-              const seenImos = new Set(prev.map(p => p.vessel.imo));
-              const merged = [...prev];
-              for (const item of onlineResults) {
+              const seenImos = new Set(onlineResults.map(p => p.vessel.imo));
+              const merged = [...onlineResults];
+              for (const item of prev) {
                 if (!seenImos.has(item.vessel.imo)) {
                   seenImos.add(item.vessel.imo);
                   merged.push(item);
@@ -446,7 +453,7 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
         } finally {
           setIsSearchingOnline(false);
         }
-      }, 300);
+      }, 250);
     }
   };
 
@@ -483,21 +490,30 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
 
     setDataSourceNotification({
       source: result.source === 'backup_interno' ? 'local' : 'online',
-      message: `${result.sourceLabel}: ${v.name} (${v.flag || 'Internacional'} · LOA ${v.loa || '___'}m · Boca ${v.beam || '___'}m · Calado ${v.currentDraftAft ? v.currentDraftAft + 'm' : '___'} · GRT ${v.grossTonnage ? v.grossTonnage.toLocaleString() : '___'})`
+      message: `${result.sourceLabel}: ${v.name} (${v.flag || 'Internacional'} · LOA ${v.loa || '___'}m · Boca ${v.beam || '___'}m · GRT ${v.grossTonnage ? v.grossTonnage.toLocaleString() : '___'})`
     });
 
-    // If IMO is valid, consult VesselFinder for live draft & destination
+    // If IMO is valid, consult VesselFinder for live draft, callsign & destination
     if (v.imo && v.imo.length >= 4 && isOnline) {
       try {
         const details = await fetchVesselDetailsOnline(v.imo);
         if (details) {
+          if (details.name) setShipName(details.name);
+          if (details.flag) setNationality(details.flag);
+          if (details.loa && details.loa > 0) setLoa(details.loa);
+          if (details.beam && details.beam > 0) setBeam(details.beam);
+          if (details.grossTonnage && details.grossTonnage > 0) setGrt(details.grossTonnage);
           if (details.draft && details.draft > 0) {
             setDraftAft(details.draft);
-            setDraftFwd(Math.max(0, parseFloat((details.draft - 0.4).toFixed(1))));
+            if (!draftFwd) setDraftFwd(details.draft);
           }
-          if (details.destination && !nextPort) {
+          if (details.destination) {
             setNextPort(details.destination);
           }
+          setDataSourceNotification({
+            source: 'online',
+            message: `🌐 Dados Oficiais Confirmados: ${details.name || v.name} · IMO ${v.imo} (Bandeira: ${details.flag || v.flag} · LOA: ${details.loa || v.loa}m · Boca: ${details.beam || v.beam}m${details.draft ? ` · Calado Real: ${details.draft}m` : ''}${details.callSign ? ` · Indicativo: ${details.callSign}` : ''})`
+          });
         }
       } catch (e) {
         console.warn('Erro ao buscar detalhes adicionais do navio:', e);
@@ -555,7 +571,7 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
         },
         maneuverType: maneuverType,
         status: 'concluida' as const,
-        scheduledTime: new Date().toISOString(),
+        scheduledTime: maneuverDate ? `${maneuverDate}T${pilotOnBoardTime || lastLineTime || '08:00'}:00` : new Date().toISOString(),
         berthFrom: origin || 'Fundeio',
         berthTo: berthTo || 'Cais de Atracação',
         pilotId: selectedPilot?.id || 'plt-01',
@@ -722,27 +738,27 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
       tugsDismissedTime: tugFim,
       tugOperationalHours: tugOperations.hours,
       pilotDutyHours: pilotDuty.hours,
-      scheduledTime: `${maneuverDate}T${pilotOnBoardTime || lastLineTime || '08:00'}:00.000Z`,
-      completedTime: `${maneuverDate}T${pilotDisembarkedTime || berthingTime || '10:00'}:00.000Z`,
+      scheduledTime: maneuverDate ? `${maneuverDate}T${pilotOnBoardTime || lastLineTime || firstLineTime || berthingTime || '08:00'}:00` : new Date().toISOString().slice(0, 19),
+      completedTime: maneuverDate ? `${maneuverDate}T${pilotDisembarkedTime || berthingTime || '10:00'}:00` : new Date().toISOString().slice(0, 19),
       durationMinutes: pilotDuty.minutes || 80,
       milestones: {
         ...(editManeuver?.milestones || {}),
-        pilotOnBoard: pilotOnBoardTime,
-        lastLineCastOff: lastLineTime,
-        firstLineAshored: firstLineTime,
-        allFastCompleted: berthingTime,
-        pilotDisembarked: pilotDisembarkedTime,
-        commenceManeuver: lastLineTime || pilotOnBoardTime,
+        pilotOnBoard: pilotOnBoardTime || '',
+        lastLineCastOff: lastLineTime || '',
+        firstLineAshored: firstLineTime || '',
+        allFastCompleted: berthingTime || '',
+        pilotDisembarked: pilotDisembarkedTime || '',
+        commenceManeuver: lastLineTime || pilotOnBoardTime || '',
       },
       maneuverDurationFormatted: maneuverDuration || pilotDuty.formatted,
-      unmooringTime: lastLineTime,
-      berthingTime: berthingTime,
+      unmooringTime: lastLineTime || '',
+      berthingTime: berthingTime || '',
       berthingModel: maneuverType === 'desatracacao' ? undefined : berthingModel,
       tugCount: tugsCount,
       tugTimings: {
-        arranque: tugArranque,
-        inicio: tugInicio,
-        fim: tugFim
+        arranque: tugArranque || '',
+        inicio: tugInicio || '',
+        fim: tugFim || ''
       },
       tugs: tugsData,
       pilotRemarks: remarks,
@@ -755,10 +771,10 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
       updateManeuver(editManeuver.id, maneuverPayload);
     } else {
       const isComplete = Boolean(pilotDisembarkedTime || berthingTime);
-      // Fidelidade estrita à hora e data de registo inseridas pelo piloto
-      const computedScheduledTime = (maneuverDate && (pilotOnBoardTime || lastLineTime))
-        ? `${maneuverDate}T${pilotOnBoardTime || lastLineTime}:00.000Z`
-        : (maneuverDate ? `${maneuverDate}T12:00:00.000Z` : new Date().toISOString());
+      // Fidelidade estrita e inalterável à hora e data de registo inseridas pelo piloto
+      const computedScheduledTime = maneuverDate
+        ? `${maneuverDate}T${pilotOnBoardTime || lastLineTime || firstLineTime || berthingTime || '08:00'}:00`
+        : new Date().toISOString().slice(0, 19);
 
       addManeuver({
         ...maneuverPayload,

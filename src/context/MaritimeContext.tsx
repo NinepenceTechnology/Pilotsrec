@@ -229,30 +229,38 @@ export const mergeManeuvers = (listA: ManeuverRecord[], listB: ManeuverRecord[])
         ? (m.updatedAt || new Date().toISOString())
         : (existing.updatedAt || new Date().toISOString());
 
-      // Deep-merge milestones so no recorded hour from any device is erased
+      const isMNewer = timeB >= timeA;
+      const primary = isMNewer ? m : existing;
+      const secondary = isMNewer ? existing : m;
+
+      // Deep-merge milestones: primary (newer) strictly takes precedence
       const mergedMilestones = {
-        ...(existing.milestones || {}),
-        ...(m.milestones || {})
+        ...(secondary.milestones || {}),
+        ...(primary.milestones || {})
       };
 
       // Deep-merge attachments
       const attMap = new Map<string, any>();
-      (existing.attachments || []).forEach((a: any) => a?.id && attMap.set(a.id, a));
-      (m.attachments || []).forEach((a: any) => a?.id && attMap.set(a.id, a));
-
-      const base = timeB >= timeA ? { ...existing, ...m } : { ...m, ...existing };
+      (secondary.attachments || []).forEach((a: any) => a?.id && attMap.set(a.id, a));
+      (primary.attachments || []).forEach((a: any) => a?.id && attMap.set(a.id, a));
 
       map.set(m.id, {
-        ...base,
+        ...secondary,
+        ...primary,
         createdAt: earliestCreated,
         updatedAt: latestUpdated,
-        scheduledTime: existing.scheduledTime || m.scheduledTime,
-        pilotOnBoardTime: existing.pilotOnBoardTime || m.pilotOnBoardTime,
-        lastLineCastOffTime: existing.lastLineCastOffTime || m.lastLineCastOffTime,
-        firstLineAshored: existing.firstLineAshored || m.firstLineAshored,
-        pilotDisembarkedTime: existing.pilotDisembarkedTime || m.pilotDisembarkedTime,
-        unmooringTime: existing.unmooringTime || m.unmooringTime,
-        berthingTime: existing.berthingTime || m.berthingTime,
+        maneuverDate: primary.maneuverDate || secondary.maneuverDate,
+        scheduledTime: primary.scheduledTime || secondary.scheduledTime,
+        pilotOnBoardTime: primary.pilotOnBoardTime !== undefined ? primary.pilotOnBoardTime : secondary.pilotOnBoardTime,
+        lastLineCastOffTime: primary.lastLineCastOffTime !== undefined ? primary.lastLineCastOffTime : secondary.lastLineCastOffTime,
+        firstLineAshored: primary.firstLineAshored !== undefined ? primary.firstLineAshored : secondary.firstLineAshored,
+        allFastBerthingTime: primary.allFastBerthingTime !== undefined ? primary.allFastBerthingTime : secondary.allFastBerthingTime,
+        pilotDisembarkedTime: primary.pilotDisembarkedTime !== undefined ? primary.pilotDisembarkedTime : secondary.pilotDisembarkedTime,
+        unmooringTime: primary.unmooringTime !== undefined ? primary.unmooringTime : secondary.unmooringTime,
+        berthingTime: primary.berthingTime !== undefined ? primary.berthingTime : secondary.berthingTime,
+        tugsMadeFastTime: primary.tugsMadeFastTime !== undefined ? primary.tugsMadeFastTime : secondary.tugsMadeFastTime,
+        tugsDismissedTime: primary.tugsDismissedTime !== undefined ? primary.tugsDismissedTime : secondary.tugsDismissedTime,
+        tugTimings: primary.tugTimings || secondary.tugTimings,
         milestones: mergedMilestones,
         attachments: Array.from(attMap.values())
       });
@@ -1239,7 +1247,7 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const recordedScheduledTime = maneuverData.scheduledTime && !maneuverData.scheduledTime.includes('Invalid')
       ? maneuverData.scheduledTime
       : (maneuverData.maneuverDate
-          ? `${maneuverData.maneuverDate}T${maneuverData.pilotOnBoardTime || maneuverData.lastLineCastOffTime || '08:00'}:00.000Z`
+          ? `${maneuverData.maneuverDate}T${maneuverData.pilotOnBoardTime || maneuverData.lastLineCastOffTime || '08:00'}:00`
           : now);
 
     const newManeuver: ManeuverRecord = {

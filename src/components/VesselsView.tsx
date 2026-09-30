@@ -377,7 +377,7 @@ export const VesselsView: React.FC<VesselsViewProps> = ({ onSelectVesselForManeu
                             <span className="text-slate-600 font-semibold">· {m.berthTo}</span>
                           </div>
                           <div className="text-[11px] text-slate-500 mt-0.5">
-                            Prático: <strong>{m.pilotName}</strong> · Desatracação: <strong>{m.unmooringTime || '13:20'}</strong> · Atracação: <strong>{m.berthingTime || '14:40'}</strong>
+                            Prático: <strong>{m.pilotName}</strong> · Desatracação: <strong>{m.unmooringTime || m.lastLineCastOffTime || '--:--'}</strong> · Atracação: <strong>{m.berthingTime || m.allFastBerthingTime || '--:--'}</strong>
                           </div>
                         </div>
 

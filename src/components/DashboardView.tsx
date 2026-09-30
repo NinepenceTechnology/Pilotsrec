@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useMaritime } from '../context/MaritimeContext';
 import { formatManeuverStatus, formatManeuverType } from '../utils/formatters';
+import { MonthlyPerformanceSummary } from './MonthlyPerformanceSummary';
 
 interface DashboardViewProps {
   onOpenNewManeuverModal: () => void;
@@ -367,6 +368,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Monthly Performance Summary with Recharts Bar Chart */}
+      <MonthlyPerformanceSummary onSelectPilot={() => setCurrentView('operacoes')} />
 
     </div>
   );

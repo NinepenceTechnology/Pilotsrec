@@ -169,11 +169,11 @@ export const OperationsView: React.FC<OperationsViewProps> = ({
         ) : (
           filteredManeuvers.map((m) => {
             const v = m.vesselSnapshot;
-            const tugsDisplayCount = m.tugCount !== undefined ? m.tugCount : (m.tugs?.length || 2);
+            const tugsDisplayCount = m.tugCount !== undefined ? m.tugCount : (m.tugs?.length || 0);
             const timings = m.tugTimings || {
-              arranque: '13:00',
-              inicio: '13:25',
-              fim: '14:45'
+              arranque: m.tugsMadeFastTime || '',
+              inicio: m.tugsMadeFastTime || '',
+              fim: m.tugsDismissedTime || ''
             };
 
             return (
@@ -320,19 +320,19 @@ export const OperationsView: React.FC<OperationsViewProps> = ({
                       <div>
                         <span className="text-[10px] text-slate-500 block font-sans font-bold">DESATRAC.</span>
                         <span className="font-bold text-black text-xs">
-                          {m.unmooringTime || m.milestones.commenceManeuver || '13:20'}
+                          {m.unmooringTime || m.lastLineCastOffTime || m.milestones?.lastLineCastOff || m.milestones?.commenceManeuver || '--:--'}
                         </span>
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-500 block font-sans font-bold">1º CABO</span>
                         <span className="font-bold text-black text-xs">
-                          {m.firstLineAshored || m.milestones.firstLineAshored || '14:15'}
+                          {m.firstLineAshored || m.milestones?.firstLineAshored || '--:--'}
                         </span>
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-500 block font-sans font-bold">ATRAC.</span>
                         <span className="font-bold text-black text-xs">
-                          {m.berthingTime || m.milestones.allFastCompleted || '14:40'}
+                          {m.allFastBerthingTime || m.berthingTime || m.milestones?.allFastCompleted || '--:--'}
                         </span>
                       </div>
                     </div>
@@ -342,14 +342,14 @@ export const OperationsView: React.FC<OperationsViewProps> = ({
                         Rebocadores: <strong>{tugsDisplayCount} TBs</strong>
                       </span>
                       <span className="font-mono font-bold text-blue-900">
-                        {m.maneuverDurationFormatted || `${m.durationMinutes || 80} min`}
+                        {m.maneuverDurationFormatted || (m.durationMinutes ? `${m.durationMinutes} min` : '--')}
                       </span>
                     </div>
 
                     <div className="text-[10px] text-slate-600 flex justify-between">
                       <span>Assistência:</span>
                       <span className="font-mono">
-                        Arranque: {timings.arranque || '13:00'} · Início: {timings.inicio || '13:25'} · Fim: {timings.fim || '14:45'}
+                        {timings.inicio ? `Início: ${timings.inicio} · Fim: ${timings.fim || '--:--'}` : 'Sem assistência'}
                       </span>
                     </div>
                   </div>

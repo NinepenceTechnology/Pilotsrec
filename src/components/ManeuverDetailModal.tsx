@@ -86,9 +86,9 @@ export const ManeuverDetailModal: React.FC<ManeuverDetailModalProps> = ({
 
   const v = maneuver.vesselSnapshot;
   const timings = maneuver.tugTimings || {
-    arranque: '13:00',
-    inicio: '13:25',
-    fim: '14:45'
+    arranque: maneuver.tugsMadeFastTime || '',
+    inicio: maneuver.tugsMadeFastTime || '',
+    fim: maneuver.tugsDismissedTime || ''
   };
 
   return (
@@ -203,25 +203,25 @@ export const ManeuverDetailModal: React.FC<ManeuverDetailModalProps> = ({
               <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
                 <span className="text-[10px] text-blue-900 font-bold block">DESATRACAÇÃO</span>
                 <span className="font-mono font-black text-sm text-black">
-                  {maneuver.unmooringTime || maneuver.milestones.commenceManeuver || '13:20'}
+                  {maneuver.unmooringTime || maneuver.lastLineCastOffTime || maneuver.milestones?.lastLineCastOff || maneuver.milestones?.commenceManeuver || '--:--'}
                 </span>
               </div>
               <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
                 <span className="text-[10px] text-blue-900 font-bold block">PRIMEIRO CABO</span>
                 <span className="font-mono font-black text-sm text-black">
-                  {maneuver.firstLineAshored || maneuver.milestones.firstLineAshored || '14:15'}
+                  {maneuver.firstLineAshored || maneuver.milestones?.firstLineAshored || '--:--'}
                 </span>
               </div>
               <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
                 <span className="text-[10px] text-blue-900 font-bold block">ATRACAÇÃO</span>
                 <span className="font-mono font-black text-sm text-black">
-                  {maneuver.berthingTime || maneuver.milestones.allFastCompleted || '14:40'}
+                  {maneuver.allFastBerthingTime || maneuver.berthingTime || maneuver.milestones?.allFastCompleted || '--:--'}
                 </span>
               </div>
               <div className="bg-blue-900 text-white p-2.5 rounded border border-black">
                 <span className="text-[10px] text-blue-200 font-bold block">TEMPO DE MANOBRAS</span>
                 <span className="font-mono font-black text-sm">
-                  {maneuver.maneuverDurationFormatted || `${maneuver.durationMinutes || 80} min`}
+                  {maneuver.maneuverDurationFormatted || (maneuver.durationMinutes ? `${maneuver.durationMinutes} min` : '--')}
                 </span>
               </div>
             </div>
@@ -253,20 +253,20 @@ export const ManeuverDetailModal: React.FC<ManeuverDetailModalProps> = ({
               <div className="bg-white p-2.5 rounded border border-slate-300">
                 <span className="text-[10px] text-slate-500 font-bold block">NÚMERO DE REBOCADORES</span>
                 <span className="font-black text-base text-blue-900">
-                  {maneuver.tugCount !== undefined ? maneuver.tugCount : (maneuver.tugs?.length || 2)} Rebocadores
+                  {maneuver.tugCount !== undefined ? maneuver.tugCount : (maneuver.tugs?.length || 0)} Rebocadores
                 </span>
               </div>
               <div className="bg-white p-2.5 rounded border border-slate-300">
                 <span className="text-[10px] text-slate-500 font-bold block">ARRANQUE (SAÍDA BASE)</span>
-                <span className="font-mono font-bold text-black text-sm">{timings.arranque || '13:00'}</span>
+                <span className="font-mono font-bold text-black text-sm">{timings.arranque || '--:--'}</span>
               </div>
               <div className="bg-white p-2.5 rounded border border-slate-300">
                 <span className="text-[10px] text-slate-500 font-bold block">INÍCIO (EMPUXO / CABOS)</span>
-                <span className="font-mono font-bold text-black text-sm">{timings.inicio || '13:25'}</span>
+                <span className="font-mono font-bold text-black text-sm">{timings.inicio || '--:--'}</span>
               </div>
               <div className="bg-white p-2.5 rounded border border-slate-300">
                 <span className="text-[10px] text-slate-500 font-bold block">FIM (LIBERAÇÃO)</span>
-                <span className="font-mono font-bold text-black text-sm">{timings.fim || '14:45'}</span>
+                <span className="font-mono font-bold text-black text-sm">{timings.fim || '--:--'}</span>
               </div>
             </div>
           </div>

@@ -22,44 +22,44 @@ export interface MaritimeVesselRecord {
 
 // Base marítima enriquecida sincronizada com dados de MarineTraffic e VesselFinder
 export const GLOBAL_MARITIME_FLEET: MaritimeVesselRecord[] = [
-  // MarineTraffic AIS live fleet
+  // MarineTraffic / VesselFinder AIS verified fleet
   {
-    name: 'MSC ANNA VICTORIA',
-    imo: '9784521',
-    callSign: '3FEP9',
-    flag: 'Panamá',
-    flagCode: 'PA',
+    name: 'MSC ANNA',
+    imo: '9777204',
+    callSign: 'D5ML5',
+    flag: 'Libéria',
+    flagCode: 'LR',
     type: 'porta_conteiner',
-    loa: 399.9,
+    loa: 399.98,
     beam: 58.8,
-    maxDraft: 16.5,
-    currentDraftFwd: 13.8,
-    currentDraftAft: 14.4,
+    maxDraft: 16.0,
+    currentDraftFwd: 12.8,
+    currentDraftAft: 13.1,
     agent: 'MSC Mediterranean Shipping Co.',
     origin: 'Durban (ZADUR)',
     destination: 'Porto da Beira (MZBEW)',
-    grossTonnage: 192237,
-    dwt: 202684,
-    provider: 'marine_traffic'
+    grossTonnage: 187587,
+    dwt: 213114,
+    provider: 'vessel_finder'
   },
   {
     name: 'EVER GIVEN',
     imo: '9811000',
-    callSign: 'H3RC',
-    flag: 'Panamá',
-    flagCode: 'PA',
+    callSign: 'A8AB9',
+    flag: 'Libéria',
+    flagCode: 'LR',
     type: 'porta_conteiner',
-    loa: 399.9,
+    loa: 399.94,
     beam: 58.8,
     maxDraft: 16.0,
-    currentDraftFwd: 14.2,
-    currentDraftAft: 14.8,
+    currentDraftFwd: 11.0,
+    currentDraftAft: 11.5,
     agent: 'Evergreen Marine Corp.',
     origin: 'Singapura (SGSIN)',
     destination: 'Rotterdam (NLRTM)',
-    grossTonnage: 220940,
-    dwt: 199629,
-    provider: 'marine_traffic'
+    grossTonnage: 219079,
+    dwt: 199489,
+    provider: 'vessel_finder'
   },
   {
     name: 'CMA CGM JACQUES SAADE',
@@ -67,7 +67,7 @@ export const GLOBAL_MARITIME_FLEET: MaritimeVesselRecord[] = [
     callSign: 'FLSU',
     flag: 'França',
     flagCode: 'FR',
-    type: 'porta_conteiner',
+    type: 'gasoso_gnl_glp',
     loa: 400.0,
     beam: 61.3,
     maxDraft: 16.0,
@@ -78,7 +78,7 @@ export const GLOBAL_MARITIME_FLEET: MaritimeVesselRecord[] = [
     destination: 'Porto de Maputo (MZMPM)',
     grossTonnage: 236583,
     dwt: 220000,
-    provider: 'marine_traffic'
+    provider: 'vessel_finder'
   },
   {
     name: 'MAERSK MC-KINNEY MOLLER',
@@ -87,36 +87,36 @@ export const GLOBAL_MARITIME_FLEET: MaritimeVesselRecord[] = [
     flag: 'Dinamarca',
     flagCode: 'DK',
     type: 'porta_conteiner',
-    loa: 399.2,
+    loa: 399.0,
     beam: 59.0,
     maxDraft: 16.5,
-    currentDraftFwd: 13.5,
-    currentDraftAft: 14.1,
+    currentDraftFwd: 13.0,
+    currentDraftAft: 13.2,
     agent: 'Maersk Mozambique',
     origin: 'Algeciras (ESALG)',
     destination: 'Porto da Beira (MZBEW)',
     grossTonnage: 194849,
-    dwt: 194417,
-    provider: 'marine_traffic'
+    dwt: 194153,
+    provider: 'vessel_finder'
   },
   {
     name: 'VALE BRASIL',
     imo: '9488918',
-    callSign: 'D5BY8',
-    flag: 'Libéria',
-    flagCode: 'LR',
+    callSign: 'VRPY5',
+    flag: 'Hong Kong',
+    flagCode: 'HK',
     type: 'graneleiro',
     loa: 362.0,
     beam: 65.0,
     maxDraft: 23.0,
-    currentDraftFwd: 21.8,
-    currentDraftAft: 22.4,
+    currentDraftFwd: 22.8,
+    currentDraftAft: 23.2,
     agent: 'Vale Moçambique Logística',
     origin: 'Terminal de Carvão da Beira',
     destination: 'Qingdao (CNQDG)',
-    grossTonnage: 198000,
-    dwt: 400000,
-    provider: 'marine_traffic'
+    grossTonnage: 199631,
+    dwt: 402347,
+    provider: 'vessel_finder'
   },
   {
     name: 'FRONTIER FALCON',
@@ -572,38 +572,64 @@ export async function fetchVesselFinderOnline(query: string): Promise<VesselSear
 /**
  * Consulta detalhes técnicos (Calado / Draught e Indicativo de Chamada) de um navio no VesselFinder.com
  */
-export async function fetchVesselDetailsOnline(imo: string): Promise<{ callSign?: string; draft?: number; destination?: string } | null> {
+export async function fetchVesselDetailsOnline(imo: string): Promise<{ 
+  name?: string;
+  callSign?: string; 
+  draft?: number; 
+  destination?: string;
+  loa?: number;
+  beam?: number;
+  grossTonnage?: number;
+  dwt?: number;
+  flag?: string;
+  typeName?: string;
+} | null> {
   if (!imo || imo.trim().length < 4) return null;
   const cleanImo = imo.replace(/\D/g, '');
 
-  // Primeiro verificar se já temos no catálogo estático enriquecido
-  const match = GLOBAL_MARITIME_FLEET.find(v => v.imo.replace(/\D/g, '') === cleanImo);
-  if (match && match.currentDraftAft && match.currentDraftAft > 0) {
-    return {
-      callSign: match.callSign || '',
-      draft: match.currentDraftAft,
-      destination: match.destination || 'Porto da Beira'
-    };
-  }
-
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 5500);
 
     const res = await fetch(`/api/vesselfinder-details?imo=${encodeURIComponent(cleanImo)}`, {
       signal: controller.signal
     });
     clearTimeout(timeoutId);
 
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.success) return null;
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        return {
+          name: data.name || '',
+          callSign: data.callSign || '',
+          draft: typeof data.draft === 'number' && data.draft > 0 ? data.draft : undefined,
+          destination: data.destination || '',
+          loa: data.loa || 0,
+          beam: data.beam || 0,
+          grossTonnage: data.grossTonnage || 0,
+          dwt: data.dwt || 0,
+          flag: data.flag || '',
+          typeName: data.typeName || ''
+        };
+      }
+    }
+  } catch {}
+
+  // Fallback para navio verificado caso a internet esteja indisponível
+  const match = GLOBAL_MARITIME_FLEET.find(v => v.imo.replace(/\D/g, '') === cleanImo);
+  if (match) {
     return {
-      callSign: data.callSign || '',
-      draft: data.draft || 0,
-      destination: data.destination || ''
+      name: match.name,
+      callSign: match.callSign || '',
+      draft: match.currentDraftAft || undefined,
+      destination: match.destination || '',
+      loa: match.loa,
+      beam: match.beam,
+      grossTonnage: match.grossTonnage,
+      dwt: match.dwt,
+      flag: match.flag
     };
-  } catch {
-    return null;
   }
+
+  return null;
 }

@@ -177,6 +177,7 @@ export interface ManeuverRecord {
   lastLineCastOffTime?: string; // ÚLTIMO CABO LARGADO (ALL CLEAR)
   firstLineAshored?: string;  // PRIMEIRO CABO EM TERRA (FIRST LINE)
   berthingTime?: string;      // ATRACAÇÃO / AMARRADO (ALL FAST)
+  allFastBerthingTime?: string; // ATRACAÇÃO / AMARRADO (ALL FAST)
   pilotDisembarkedTime?: string; // DESEMBARQUE DO PILOTO (PILOT AWAY)
   unmooringTime?: string;     // DESATRACAÇÃO
   berthingModel?: BerthingModel; // MODELO DE ATRACAÇÃO
