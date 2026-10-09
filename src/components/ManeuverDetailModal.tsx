@@ -199,32 +199,88 @@ export const ManeuverDetailModal: React.FC<ManeuverDetailModalProps> = ({
                 : '2. HORÁRIOS DA OPERAÇÃO, MODELO DE ATRACAÇÃO & TEMPO DE MANOBRA'}
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
-                <span className="text-[10px] text-blue-900 font-bold block">DESATRACAÇÃO</span>
-                <span className="font-mono font-black text-sm text-black">
-                  {maneuver.unmooringTime || maneuver.lastLineCastOffTime || maneuver.milestones?.lastLineCastOff || maneuver.milestones?.commenceManeuver || '--:--'}
-                </span>
+            {maneuver.maneuverType === 'desatracacao' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
+                  <span className="text-[10px] text-blue-900 font-bold block">PILOTO A BORDO (POB)</span>
+                  <span className="font-mono font-black text-sm text-black">
+                    {maneuver.pilotOnBoardTime || maneuver.milestones?.pilotOnBoard || '--:--'}
+                  </span>
+                </div>
+                <div className="bg-amber-50 p-2.5 rounded border border-amber-300">
+                  <span className="text-[10px] text-amber-900 font-bold block">DESATRACAÇÃO (LIVRE)</span>
+                  <span className="font-mono font-black text-sm text-black">
+                    {maneuver.unmooringTime || maneuver.lastLineCastOffTime || maneuver.milestones?.lastLineCastOff || maneuver.milestones?.commenceManeuver || '--:--'}
+                  </span>
+                </div>
+                <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
+                  <span className="text-[10px] text-blue-900 font-bold block">DESEMBARQUE PILOTO</span>
+                  <span className="font-mono font-black text-sm text-black">
+                    {maneuver.pilotDisembarkedTime || maneuver.milestones?.pilotDisembarked || '--:--'}
+                  </span>
+                </div>
+                <div className="bg-blue-900 text-white p-2.5 rounded border border-black">
+                  <span className="text-[10px] text-blue-200 font-bold block">TEMPO DE MANOBRAS</span>
+                  <span className="font-mono font-black text-sm">
+                    {maneuver.maneuverDurationFormatted || (maneuver.durationMinutes ? `${maneuver.durationMinutes} min` : '--')}
+                  </span>
+                </div>
               </div>
-              <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
-                <span className="text-[10px] text-blue-900 font-bold block">PRIMEIRO CABO</span>
-                <span className="font-mono font-black text-sm text-black">
-                  {maneuver.firstLineAshored || maneuver.milestones?.firstLineAshored || '--:--'}
-                </span>
+            ) : maneuver.maneuverType === 'atracacao' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
+                  <span className="text-[10px] text-blue-900 font-bold block">PILOTO A BORDO (POB)</span>
+                  <span className="font-mono font-black text-sm text-black">
+                    {maneuver.pilotOnBoardTime || maneuver.milestones?.pilotOnBoard || '--:--'}
+                  </span>
+                </div>
+                <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
+                  <span className="text-[10px] text-blue-900 font-bold block">PRIMEIRO CABO</span>
+                  <span className="font-mono font-black text-sm text-black">
+                    {maneuver.firstLineAshored || maneuver.milestones?.firstLineAshored || '--:--'}
+                  </span>
+                </div>
+                <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
+                  <span className="text-[10px] text-blue-900 font-bold block">ATRACAÇÃO (ALL FAST)</span>
+                  <span className="font-mono font-black text-sm text-black">
+                    {maneuver.allFastBerthingTime || maneuver.berthingTime || maneuver.milestones?.allFastCompleted || '--:--'}
+                  </span>
+                </div>
+                <div className="bg-blue-900 text-white p-2.5 rounded border border-black">
+                  <span className="text-[10px] text-blue-200 font-bold block">TEMPO DE MANOBRAS</span>
+                  <span className="font-mono font-black text-sm">
+                    {maneuver.maneuverDurationFormatted || (maneuver.durationMinutes ? `${maneuver.durationMinutes} min` : '--')}
+                  </span>
+                </div>
               </div>
-              <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
-                <span className="text-[10px] text-blue-900 font-bold block">ATRACAÇÃO</span>
-                <span className="font-mono font-black text-sm text-black">
-                  {maneuver.allFastBerthingTime || maneuver.berthingTime || maneuver.milestones?.allFastCompleted || '--:--'}
-                </span>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
+                  <span className="text-[10px] text-blue-900 font-bold block">DESATRACAÇÃO / SOLTAR</span>
+                  <span className="font-mono font-black text-sm text-black">
+                    {maneuver.unmooringTime || maneuver.lastLineCastOffTime || maneuver.milestones?.lastLineCastOff || maneuver.milestones?.commenceManeuver || '--:--'}
+                  </span>
+                </div>
+                <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
+                  <span className="text-[10px] text-blue-900 font-bold block">PRIMEIRO CABO</span>
+                  <span className="font-mono font-black text-sm text-black">
+                    {maneuver.firstLineAshored || maneuver.milestones?.firstLineAshored || '--:--'}
+                  </span>
+                </div>
+                <div className="bg-blue-50/70 p-2.5 rounded border border-blue-200">
+                  <span className="text-[10px] text-blue-900 font-bold block">ATRACAÇÃO</span>
+                  <span className="font-mono font-black text-sm text-black">
+                    {maneuver.allFastBerthingTime || maneuver.berthingTime || maneuver.milestones?.allFastCompleted || '--:--'}
+                  </span>
+                </div>
+                <div className="bg-blue-900 text-white p-2.5 rounded border border-black">
+                  <span className="text-[10px] text-blue-200 font-bold block">TEMPO DE MANOBRAS</span>
+                  <span className="font-mono font-black text-sm">
+                    {maneuver.maneuverDurationFormatted || (maneuver.durationMinutes ? `${maneuver.durationMinutes} min` : '--')}
+                  </span>
+                </div>
               </div>
-              <div className="bg-blue-900 text-white p-2.5 rounded border border-black">
-                <span className="text-[10px] text-blue-200 font-bold block">TEMPO DE MANOBRAS</span>
-                <span className="font-mono font-black text-sm">
-                  {maneuver.maneuverDurationFormatted || (maneuver.durationMinutes ? `${maneuver.durationMinutes} min` : '--')}
-                </span>
-              </div>
-            </div>
+            )}
 
             <div className={`grid grid-cols-1 ${maneuver.maneuverType === 'desatracacao' ? '' : 'sm:grid-cols-2'} gap-3 text-xs pt-1`}>
               {maneuver.maneuverType !== 'desatracacao' && (

@@ -244,20 +244,25 @@ export const mergeManeuvers = (listA: ManeuverRecord[], listB: ManeuverRecord[])
       (secondary.attachments || []).forEach((a: any) => a?.id && attMap.set(a.id, a));
       (primary.attachments || []).forEach((a: any) => a?.id && attMap.set(a.id, a));
 
+      const finalManeuverType = primary.maneuverType || secondary.maneuverType || 'atracacao';
+      const isDesatracacao = finalManeuverType === 'desatracacao';
+
       map.set(m.id, {
         ...secondary,
         ...primary,
         createdAt: earliestCreated,
         updatedAt: latestUpdated,
+        maneuverType: finalManeuverType,
         maneuverDate: primary.maneuverDate || secondary.maneuverDate,
         scheduledTime: primary.scheduledTime || secondary.scheduledTime,
         pilotOnBoardTime: primary.pilotOnBoardTime !== undefined ? primary.pilotOnBoardTime : secondary.pilotOnBoardTime,
         lastLineCastOffTime: primary.lastLineCastOffTime !== undefined ? primary.lastLineCastOffTime : secondary.lastLineCastOffTime,
-        firstLineAshored: primary.firstLineAshored !== undefined ? primary.firstLineAshored : secondary.firstLineAshored,
-        allFastBerthingTime: primary.allFastBerthingTime !== undefined ? primary.allFastBerthingTime : secondary.allFastBerthingTime,
+        firstLineAshored: isDesatracacao ? '' : (primary.firstLineAshored !== undefined ? primary.firstLineAshored : secondary.firstLineAshored),
+        allFastBerthingTime: isDesatracacao ? '' : (primary.allFastBerthingTime !== undefined ? primary.allFastBerthingTime : secondary.allFastBerthingTime),
         pilotDisembarkedTime: primary.pilotDisembarkedTime !== undefined ? primary.pilotDisembarkedTime : secondary.pilotDisembarkedTime,
         unmooringTime: primary.unmooringTime !== undefined ? primary.unmooringTime : secondary.unmooringTime,
-        berthingTime: primary.berthingTime !== undefined ? primary.berthingTime : secondary.berthingTime,
+        berthingTime: isDesatracacao ? '' : (primary.berthingTime !== undefined ? primary.berthingTime : secondary.berthingTime),
+        berthingModel: isDesatracacao ? undefined : (primary.berthingModel !== undefined ? primary.berthingModel : secondary.berthingModel),
         tugsMadeFastTime: primary.tugsMadeFastTime !== undefined ? primary.tugsMadeFastTime : secondary.tugsMadeFastTime,
         tugsDismissedTime: primary.tugsDismissedTime !== undefined ? primary.tugsDismissedTime : secondary.tugsDismissedTime,
         tugTimings: primary.tugTimings || secondary.tugTimings,
@@ -326,14 +331,96 @@ const broadcastSharedEvent = (type: string, payload: any) => {
   } catch {}
 };
 
-// Purge any pre-existing v1 mock data from browser localStorage to start cleanly from zero
-try {
-  ['pilots_records_vessels_v1', 'pilots_records_maneuvers_v1', 'pilots_records_pilots_v1', 'pilots_records_shifts_v1', 'pilots_records_weather_v1'].forEach(k => {
-    localStorage.removeItem(k);
-  });
-} catch {
-  // Ignore in SSR/sandbox
-}
+// Resgate e Migração Universal de Dados de Versões Anteriores e Backups Locais de Outros Dispositivos
+export const collectDataFromAllVersionsAndBackups = (): {
+  migratedManeuvers: ManeuverRecord[];
+  migratedVessels: Vessel[];
+  migratedPilots: Pilot[];
+} => {
+  let allManeuvers: ManeuverRecord[] = [];
+  let allVessels: Vessel[] = [];
+  let allPilots: Pilot[] = [];
+
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return { migratedManeuvers: allManeuvers, migratedVessels: allVessels, migratedPilots: allPilots };
+  }
+
+  try {
+    // 1. Vasculhar chaves de versões v1, v2 e genéricas
+    const potentialManeuverKeys = ['pilots_records_maneuvers_v2', 'pilots_records_maneuvers_v1', 'pilots_records_maneuvers'];
+    const potentialVesselKeys = ['pilots_records_vessels_v2', 'pilots_records_vessels_v1', 'pilots_records_vessels'];
+    const potentialPilotKeys = ['pilots_records_pilots_v2', 'pilots_records_pilots_v1', 'pilots_records_pilots'];
+
+    potentialManeuverKeys.forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            allManeuvers = mergeManeuvers(allManeuvers, parsed);
+          }
+        }
+      } catch {}
+    });
+
+    potentialVesselKeys.forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            allVessels = mergeVessels(allVessels, parsed);
+          }
+        }
+      } catch {}
+    });
+
+    potentialPilotKeys.forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            allPilots = mergePilots(allPilots, parsed);
+          }
+        }
+      } catch {}
+    });
+
+    // 2. Vasculhar todos os backups de pilotos salvos neste navegador (pilot_backup_*)
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key.includes('pilot_backup') || key.includes('unified_offline_backup') || key.includes('unified_backup')) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const data = JSON.parse(raw);
+            const targetM = data.maneuvers || data.database?.maneuvers;
+            const targetV = data.vessels || data.database?.vessels;
+            const targetP = data.pilots || data.database?.pilots;
+
+            if (Array.isArray(targetM) && targetM.length > 0) {
+              allManeuvers = mergeManeuvers(allManeuvers, targetM);
+            }
+            if (Array.isArray(targetV) && targetV.length > 0) {
+              allVessels = mergeVessels(allVessels, targetV);
+            }
+            if (Array.isArray(targetP) && targetP.length > 0) {
+              allPilots = mergePilots(allPilots, targetP);
+            }
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
+  return {
+    migratedManeuvers: allManeuvers,
+    migratedVessels: allVessels,
+    migratedPilots: allPilots
+  };
+};
 
 export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentView, setCurrentView] = useState<AppView>('dashboard');
@@ -395,11 +482,17 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   });
 
-  // Load from localStorage or default
+  // Load from localStorage or default, with universal recovery across versions & test devices
   const [vessels, setVessels] = useState<Vessel[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.VESSELS);
-      return saved ? JSON.parse(saved) : INITIAL_VESSELS;
+      const current = saved ? JSON.parse(saved) : INITIAL_VESSELS;
+      const { migratedVessels } = collectDataFromAllVersionsAndBackups();
+      const merged = mergeVessels(current, migratedVessels);
+      if (merged.length > (current?.length || 0)) {
+        try { localStorage.setItem(STORAGE_KEYS.VESSELS, JSON.stringify(merged)); } catch {}
+      }
+      return merged;
     } catch {
       return INITIAL_VESSELS;
     }
@@ -408,7 +501,13 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [maneuvers, setManeuvers] = useState<ManeuverRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.MANEUVERS);
-      return saved ? JSON.parse(saved) : INITIAL_MANEUVERS;
+      const current = saved ? JSON.parse(saved) : INITIAL_MANEUVERS;
+      const { migratedManeuvers } = collectDataFromAllVersionsAndBackups();
+      const merged = mergeManeuvers(current, migratedManeuvers);
+      if (merged.length > (current?.length || 0)) {
+        try { localStorage.setItem(STORAGE_KEYS.MANEUVERS, JSON.stringify(merged)); } catch {}
+      }
+      return merged;
     } catch {
       return INITIAL_MANEUVERS;
     }
@@ -417,7 +516,9 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [pilots, setPilots] = useState<Pilot[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PILOTS);
-      const parsed: Pilot[] = saved ? JSON.parse(saved) : INITIAL_PILOTS;
+      const current: Pilot[] = saved ? JSON.parse(saved) : INITIAL_PILOTS;
+      const { migratedPilots } = collectDataFromAllVersionsAndBackups();
+      let parsed = mergePilots(current, migratedPilots);
       // If user is already registered, ensure user exists in pilots
       const savedUserStr = localStorage.getItem(STORAGE_KEYS.USER_PROFILE);
       if (savedUserStr) {
@@ -772,6 +873,19 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => clearInterval(timer);
   }, []);
 
+  // Tracking refs para eliminar problemas de stale closures durante sincronização background
+  const maneuversRef = useRef(maneuvers);
+  const vesselsRef = useRef(vessels);
+  const pilotsRef = useRef(pilots);
+  const alertsRef = useRef(alerts);
+  const deletedAlertsRef = useRef(deletedAlertIds);
+
+  useEffect(() => { maneuversRef.current = maneuvers; }, [maneuvers]);
+  useEffect(() => { vesselsRef.current = vessels; }, [vessels]);
+  useEffect(() => { pilotsRef.current = pilots; }, [pilots]);
+  useEffect(() => { alertsRef.current = alerts; }, [alerts]);
+  useEffect(() => { deletedAlertsRef.current = deletedAlertIds; }, [deletedAlertIds]);
+
   // Sincronização da Base de Dados Única (Cumulativa e Sem Perdas)
   const syncUnifiedDatabase = async (mode: 'push_pull' | 'pull_only' = 'push_pull') => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -782,11 +896,11 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const payload = mode === 'push_pull' ? {
         pilotName: currentUser?.name || 'Piloto em Serviço',
-        maneuvers,
-        alerts,
-        vessels,
-        pilots,
-        deletedAlertIds
+        maneuvers: maneuversRef.current,
+        alerts: alertsRef.current,
+        vessels: vesselsRef.current,
+        pilots: pilotsRef.current,
+        deletedAlertIds: deletedAlertsRef.current
       } : null;
 
       const res = await fetch('/api/shared/sync-unified', {
@@ -1082,6 +1196,16 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 setManeuvers(prev => mergeManeuvers(prev, data.payload.maneuvers));
               }
               triggerUpdatedToast();
+            } else if (data.type === 'VESSEL_SYNC' && data.payload) {
+              if (Array.isArray(data.payload.vessels)) {
+                setVessels(prev => mergeVessels(prev, data.payload.vessels));
+              }
+              triggerUpdatedToast();
+            } else if (data.type === 'PILOT_SYNC' && data.payload) {
+              if (Array.isArray(data.payload.pilots)) {
+                setPilots(prev => mergePilots(prev, data.payload.pilots));
+              }
+              triggerUpdatedToast();
             } else if (data.type === 'PING') {
               setIsRealtimeConnected(true);
               if (data.activeClients) setActiveSyncDevices(data.activeClients);
@@ -1111,22 +1235,22 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  // 2. Sincronização Inicial, Polling a cada 10 Minutos & Busca de Versões Disponíveis (Silenciosa)
+  // 2. Sincronização Inicial, Polling Responsivo & Busca de Versões Disponíveis (Silenciosa)
   useEffect(() => {
-    // Sincronização e verificação inicial silenciosa
+    // Sincronização e verificação inicial imediata
     syncUnifiedDatabase('push_pull');
     checkForSystemUpdates();
 
-    // Polling estrito de 10 em 10 minutos (10 * 60 * 1000 ms) para dados de todos os usuários online e versões
-    const TEN_MINUTES_MS = 10 * 60 * 1000;
+    // Polling ágil e contínuo a cada 20 segundos para manter todos os dispositivos e celulares sempre atualizados
+    const SYNC_INTERVAL_MS = 20 * 1000;
     const intervalId = setInterval(() => {
       if (typeof navigator === 'undefined' || navigator.onLine) {
         syncUnifiedDatabase('push_pull');
         checkForSystemUpdates();
       }
-    }, TEN_MINUTES_MS);
+    }, SYNC_INTERVAL_MS);
 
-    // Sincronização silenciosa ao voltar o foco ou reconectar à rede
+    // Sincronização instantânea ao voltar o foco, reconectar à rede ou desbloquear celular
     const handleSyncTrigger = () => {
       setIsOnline(navigator.onLine);
       syncUnifiedDatabase('push_pull');
@@ -1138,9 +1262,18 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setIsRealtimeConnected(false);
     };
 
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        handleSyncTrigger();
+      }
+    };
+
     window.addEventListener('online', handleSyncTrigger);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('focus', handleSyncTrigger);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
 
     // Sincronização com abas locais via storage
     const handleStorage = (e: StorageEvent) => {
@@ -1154,6 +1287,18 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setManeuvers(parsed);
+        } catch {}
+      }
+      if (e.key === STORAGE_KEYS.VESSELS && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setVessels(parsed);
+        } catch {}
+      }
+      if (e.key === STORAGE_KEYS.PILOTS && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setPilots(parsed);
         } catch {}
       }
     };
@@ -1198,6 +1343,12 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
         } else if (type === 'MANEUVER_UPSERT' && payload) {
           setManeuvers(prev => mergeManeuvers(prev, [payload]));
+        } else if (type === 'MANEUVER_DELETE' && payload?.id) {
+          setManeuvers(prev => prev.filter(m => m.id !== payload.id));
+        } else if (type === 'VESSEL_UPSERT' && payload) {
+          setVessels(prev => mergeVessels(prev, [payload]));
+        } else if (type === 'PILOT_UPSERT' && payload) {
+          setPilots(prev => mergePilots(prev, [payload]));
         } else if (type === 'SYNC_ALL') {
           syncUnifiedDatabase('push_pull');
         }
@@ -1502,12 +1653,55 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ...vesselData,
       id: newId
     };
-    setVessels(prev => [newVessel, ...prev]);
+    setVessels(prev => {
+      const next = [newVessel, ...prev.filter(v => v.imo !== newVessel.imo && v.name !== newVessel.name)];
+      try { localStorage.setItem(STORAGE_KEYS.VESSELS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    try {
+      fetch('/api/shared/vessels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vessel: newVessel })
+      }).catch(() => {});
+    } catch {}
+    broadcastSharedEvent('VESSEL_UPSERT', newVessel);
+
+    setTimeout(() => {
+      syncUnifiedDatabase('push_pull').catch(() => {});
+    }, 200);
+
     return newId;
   };
 
   const updateVessel = (id: string, updates: Partial<Vessel>) => {
-    setVessels(prev => prev.map(v => v.id === id ? { ...v, ...updates } : v));
+    let updated: Vessel | null = null;
+    setVessels(prev => {
+      const next = prev.map(v => {
+        if (v.id === id) {
+          updated = { ...v, ...updates };
+          return updated;
+        }
+        return v;
+      });
+      try { localStorage.setItem(STORAGE_KEYS.VESSELS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    if (updated) {
+      try {
+        fetch('/api/shared/vessels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vessel: updated })
+        }).catch(() => {});
+      } catch {}
+      broadcastSharedEvent('VESSEL_UPSERT', updated);
+      setTimeout(() => {
+        syncUnifiedDatabase('push_pull').catch(() => {});
+      }, 200);
+    }
   };
 
   const addPilot = (pilotData: Omit<Pilot, 'id' | 'completedManeuversCount'>): string => {
@@ -1517,7 +1711,25 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       id: newId,
       completedManeuversCount: 0
     };
-    setPilots(prev => [...prev, newPilot]);
+    setPilots(prev => {
+      const next = [...prev.filter(p => p.licenseNumber !== newPilot.licenseNumber && p.name !== newPilot.name), newPilot];
+      try { localStorage.setItem(STORAGE_KEYS.PILOTS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    try {
+      fetch('/api/shared/pilots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pilot: newPilot })
+      }).catch(() => {});
+    } catch {}
+    broadcastSharedEvent('PILOT_UPSERT', newPilot);
+
+    setTimeout(() => {
+      syncUnifiedDatabase('push_pull').catch(() => {});
+    }, 200);
+
     return newId;
   };
 
@@ -1864,7 +2076,24 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteManeuver = (id: string) => {
-    setManeuvers(prev => prev.filter(m => m.id !== id));
+    setManeuvers(prev => {
+      const next = prev.filter(m => m.id !== id);
+      try { localStorage.setItem(STORAGE_KEYS.MANEUVERS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    try {
+      fetch(`/api/shared/maneuvers?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      }).catch(() => {});
+    } catch {}
+
+    broadcastSharedEvent('MANEUVER_DELETE', { id });
+    setTimeout(() => {
+      syncUnifiedDatabase('push_pull').catch(() => {});
+    }, 200);
   };
 
   // Alertas Portuários - Compartilhados com TODOS os utilizadores do app

@@ -31,6 +31,7 @@ export const VesselsView: React.FC<VesselsViewProps> = ({ onSelectVesselForManeu
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [selectedVessel, setSelectedVessel] = useState<Vessel | null>(vessels[0] || null);
   const [isAddingVessel, setIsAddingVessel] = useState(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState<'lista' | 'detalhes'>('lista');
 
   // Auto-suggestion state for vessel creation modal
   const [vesselSuggestions, setVesselSuggestions] = useState<VesselSearchResult[]>([]);
@@ -101,7 +102,44 @@ export const VesselsView: React.FC<VesselsViewProps> = ({ onSelectVesselForManeu
         } finally {
           setIsSearchingOnline(false);
         }
-      }, 400);
+      }, 350);
+    }
+  };
+
+  const handleImoInput = (imoQuery: string) => {
+    setFormData(prev => ({ ...prev, imo: imoQuery }));
+    const clean = imoQuery.trim().replace(/\D/g, '');
+    if (clean.length < 3) return;
+
+    const local = searchVesselsWithSuggestions(clean, vessels, maneuvers);
+    setVesselSuggestions(local);
+    setIsDropdownOpen(local.length > 0);
+
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (isOnline) {
+      setIsSearchingOnline(true);
+      searchTimeoutRef.current = setTimeout(async () => {
+        try {
+          const online = await fetchVesselFinderOnline(clean);
+          if (online && online.length > 0) {
+            setVesselSuggestions(prev => {
+              const seenImos = new Set(prev.map(p => p.vessel.imo));
+              const merged = [...prev];
+              for (const item of online) {
+                if (!seenImos.has(item.vessel.imo)) {
+                  seenImos.add(item.vessel.imo);
+                  merged.push(item);
+                }
+              }
+              return merged;
+            });
+            setIsDropdownOpen(true);
+          }
+        } catch {
+        } finally {
+          setIsSearchingOnline(false);
+        }
+      }, 350);
     }
   };
 
@@ -233,10 +271,38 @@ export const VesselsView: React.FC<VesselsViewProps> = ({ onSelectVesselForManeu
         </div>
       </div>
 
+      {/* Mobile Tab Switcher */}
+      <div className="flex lg:hidden bg-slate-200 p-1 rounded-lg gap-1 border border-slate-300">
+        <button
+          type="button"
+          onClick={() => setMobileActiveTab('lista')}
+          className={`flex-1 py-2 text-xs font-black rounded-md transition-all ${
+            mobileActiveTab === 'lista'
+              ? 'bg-blue-900 text-white shadow'
+              : 'text-slate-700 hover:text-black'
+          }`}
+        >
+          Frota ({filteredVessels.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileActiveTab('detalhes')}
+          className={`flex-1 py-2 text-xs font-black rounded-md transition-all ${
+            mobileActiveTab === 'detalhes'
+              ? 'bg-blue-900 text-white shadow'
+              : 'text-slate-700 hover:text-black'
+          }`}
+        >
+          {selectedVessel ? selectedVessel.name : 'Ficha Técnica'}
+        </button>
+      </div>
+
       {/* 2-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left List */}
-        <div className="bg-white border-2 border-black rounded-xl p-4 shadow space-y-3">
+        <div className={`bg-white border-2 border-black rounded-xl p-4 shadow space-y-3 ${
+          mobileActiveTab === 'lista' ? 'block' : 'hidden lg:block'
+        }`}>
           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
             <h3 className="font-black text-sm uppercase text-blue-900">
               Navios no Sistema ({filteredVessels.length})
@@ -250,7 +316,10 @@ export const VesselsView: React.FC<VesselsViewProps> = ({ onSelectVesselForManeu
               return (
                 <div
                   key={v.id}
-                  onClick={() => setSelectedVessel(v)}
+                  onClick={() => {
+                    setSelectedVessel(v);
+                    setMobileActiveTab('detalhes');
+                  }}
                   className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${
                     isSelected
                       ? 'bg-blue-900 text-white border-black shadow'
@@ -279,9 +348,23 @@ export const VesselsView: React.FC<VesselsViewProps> = ({ onSelectVesselForManeu
         </div>
 
         {/* Right Details */}
-        <div className="lg:col-span-2 bg-white border-2 border-black rounded-xl p-5 shadow space-y-5">
+        <div className={`lg:col-span-2 bg-white border-2 border-black rounded-xl p-5 shadow space-y-5 ${
+          mobileActiveTab === 'detalhes' ? 'block' : 'hidden lg:block'
+        }`}>
           {selectedVessel ? (
             <>
+              {/* Back to list button on mobile */}
+              <div className="flex lg:hidden items-center justify-between pb-2 border-b border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setMobileActiveTab('lista')}
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded border border-slate-300 flex items-center gap-1"
+                >
+                  ← Ver Todos os Navios
+                </button>
+                <span className="text-xs font-mono font-bold text-slate-500">IMO {selectedVessel.imo}</span>
+              </div>
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b-2 border-slate-200 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
@@ -302,7 +385,7 @@ export const VesselsView: React.FC<VesselsViewProps> = ({ onSelectVesselForManeu
 
                 <button
                   onClick={() => onSelectVesselForManeuver(selectedVessel)}
-                  className="px-4 py-2 rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-black text-xs border-2 border-black shadow flex items-center gap-1.5"
+                  className="px-4 py-2.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-black text-xs border-2 border-black shadow flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-95"
                 >
                   <Anchor className="w-4 h-4" />
                   <span>REGISTAR MANOBRA DESTE NAVIO</span>
@@ -365,27 +448,71 @@ export const VesselsView: React.FC<VesselsViewProps> = ({ onSelectVesselForManeu
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {vesselManeuvers.map(m => (
-                      <div 
-                        key={m.id}
-                        className="p-3 bg-white border border-slate-300 rounded-lg flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold uppercase text-blue-900">{m.maneuverType}</span>
-                            <span className="font-mono text-slate-500">({m.id})</span>
-                            <span className="text-slate-600 font-semibold">· {m.berthTo}</span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            Prático: <strong>{m.pilotName}</strong> · Desatracação: <strong>{m.unmooringTime || m.lastLineCastOffTime || '--:--'}</strong> · Atracação: <strong>{m.berthingTime || m.allFastBerthingTime || '--:--'}</strong>
-                          </div>
-                        </div>
+                    {vesselManeuvers.map(m => {
+                      const isDesatracacao = m.maneuverType === 'desatracacao';
+                      const isAtracacao = m.maneuverType === 'atracacao';
 
-                        <span className="font-mono text-xs font-bold text-black">
-                          {formatDateTime(m.scheduledTime)}
-                        </span>
-                      </div>
-                    ))}
+                      return (
+                        <div 
+                          key={m.id}
+                          className="p-3 bg-white border border-slate-300 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`font-black text-xs px-2 py-0.5 rounded uppercase ${
+                                isDesatracacao 
+                                  ? 'bg-amber-100 text-amber-950 border border-amber-300'
+                                  : isAtracacao 
+                                    ? 'bg-blue-100 text-blue-950 border border-blue-300'
+                                    : 'bg-slate-100 text-slate-900 border border-slate-300'
+                              }`}>
+                                {isDesatracacao ? 'DESATRACAÇÃO' : isAtracacao ? 'ATRACAÇÃO' : m.maneuverType.toUpperCase()}
+                              </span>
+                              <span className="font-mono text-slate-500 font-bold">({m.id})</span>
+                              <span className="text-slate-700 font-semibold">· {m.berthTo}</span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 mt-1 flex flex-wrap items-center gap-2">
+                              <span>Prático: <strong>{m.pilotName}</strong></span>
+                              <span>·</span>
+                              {isDesatracacao ? (
+                                <>
+                                  <span>Desatracado / Largada: <strong className="text-amber-950 font-mono font-bold">{m.unmooringTime || m.lastLineCastOffTime || '--:--'}</strong></span>
+                                  {m.pilotDisembarkedTime && (
+                                    <>
+                                      <span>·</span>
+                                      <span>Desembarque: <strong className="text-black font-mono font-bold">{m.pilotDisembarkedTime}</strong></span>
+                                    </>
+                                  )}
+                                </>
+                              ) : isAtracacao ? (
+                                <>
+                                  <span>1º Cabo: <strong className="text-black font-mono">{m.firstLineAshored || '--:--'}</strong></span>
+                                  <span>·</span>
+                                  <span>Atracado (All Fast): <strong className="text-blue-950 font-mono font-bold">{m.allFastBerthingTime || m.berthingTime || '--:--'}</strong></span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>Largada: <strong className="text-black font-mono">{m.unmooringTime || m.lastLineCastOffTime || '--:--'}</strong></span>
+                                  <span>·</span>
+                                  <span>Atracação: <strong className="text-blue-950 font-mono font-bold">{m.allFastBerthingTime || m.berthingTime || '--:--'}</strong></span>
+                                </>
+                              )}
+                              {(m.maneuverDurationFormatted || m.durationMinutes) && (
+                                <>
+                                  <span>·</span>
+                                  <span className="text-blue-900 font-bold">Duração: {m.maneuverDurationFormatted || `${m.durationMinutes} min`}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <span className="font-mono text-xs font-bold text-black self-end sm:self-auto shrink-0 bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                            {formatDateTime(m.scheduledTime)}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -467,12 +594,17 @@ export const VesselsView: React.FC<VesselsViewProps> = ({ onSelectVesselForManeu
                 </div>
 
                 <div>
-                  <label className="block font-bold uppercase text-black mb-1">Número IMO *</label>
+                  <label className="block font-bold uppercase text-black mb-1 flex items-center justify-between">
+                    <span>Número IMO *</span>
+                    {formData.imo && formData.imo.length >= 3 && (
+                      <span className="text-[10px] text-blue-800 font-normal">Auto-pesquisa ativa</span>
+                    )}
+                  </label>
                   <input
                     type="text"
                     value={formData.imo}
-                    onChange={(e) => setFormData({ ...formData, imo: e.target.value })}
-                    placeholder="___"
+                    onChange={(e) => handleImoInput(e.target.value)}
+                    placeholder="___ (ex: 9727534)"
                     className="w-full bg-white border border-black rounded p-2 font-bold text-black placeholder:text-slate-400 font-mono"
                     required
                   />

@@ -17,14 +17,18 @@ export const formatVesselType = (type: VesselType): string => {
 
 export const formatManeuverType = (type: ManeuverType): string => {
   switch (type) {
+    case 'atracacao': return 'Atracação';
+    case 'desatracacao': return 'Desatracação';
+    case 'mudanca': return 'Mudança';
+    case 'puxanca': return 'Puxança';
     case 'entrada': return 'Entrada (Inward)';
     case 'saida': return 'Saída (Outward)';
-    case 'mudanca_cais': return 'Mudança de Cais (Shifting)';
+    case 'mudanca_cais': return 'Mudança de Cais';
     case 'fundeio': return 'Fundeio';
-    case 'desfundeio': return 'Desfundeio (Suspender)';
-    case 'barra_entrada': return 'Pilotagem de Barra (Entrada)';
-    case 'barra_saida': return 'Pilotagem de Barra (Saída)';
-    default: return type;
+    case 'desfundeio': return 'Desfundeio';
+    case 'barra_entrada': return 'Barra (Entrada)';
+    case 'barra_saida': return 'Barra (Saída)';
+    default: return type ? String(type).toUpperCase() : 'MANOBRA';
   }
 };
 

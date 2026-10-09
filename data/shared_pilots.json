@@ -1,0 +1,14 @@
+[
+  {
+    "id": "plt-tester",
+    "name": "Tester",
+    "licenseNumber": "1212",
+    "category": "Piloto Praticante",
+    "phone": "846348589",
+    "vhfCallSign": "11/12/16",
+    "status": "de_servico",
+    "currentShift": "Manhã/Tarde (08h-16h)",
+    "completedManeuversCount": 0,
+    "avatarColor": "bg-blue-900"
+  }
+]

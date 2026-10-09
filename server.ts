@@ -6,7 +6,17 @@ import https from 'https';
 import { createServer as createViteServer } from 'vite';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
+
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -128,7 +138,20 @@ const FALLBACK_VESSELS = [
   { name: 'HOEGH TARGET', imo: '9684988', type: 'ro_ro_veiculos', typeName: 'Pure Car and Truck Carrier (PCTC)', flag: 'Norway', grossTonnage: 75717, dwt: 20766, loa: 199.9, beam: 36.5, callSign: 'LAYJ7', provider: 'vessel_finder' },
   { name: 'BOURBON LIBERTY 215', imo: '9574341', type: 'rebocador', typeName: 'Offshore Supply Tug', flag: 'France', grossTonnage: 1733, dwt: 1500, loa: 59.8, beam: 15, callSign: 'FMCF', provider: 'vessel_finder' },
   { name: 'SVITZER LUANDA', imo: '9728289', type: 'rebocador', typeName: 'ASD Terminal Tug (Bollard Pull 70T)', flag: 'Angola', grossTonnage: 448, dwt: 150, loa: 29.5, beam: 11.5, callSign: 'D2LU1', provider: 'vessel_finder' },
-  { name: 'SMIT ANGOLA', imo: '9488346', type: 'rebocador', typeName: 'Tugboat / Escort Tug', flag: 'Angola', grossTonnage: 480, dwt: 160, loa: 31, beam: 12, callSign: 'D2SM1', provider: 'vessel_finder' }
+  { name: 'SMIT ANGOLA', imo: '9488346', type: 'rebocador', typeName: 'Tugboat / Escort Tug', flag: 'Angola', grossTonnage: 480, dwt: 160, loa: 31, beam: 12, callSign: 'D2SM1', provider: 'vessel_finder' },
+  { name: 'HAFNIA ACHROITE', imo: '9727584', type: 'petroleiro', typeName: 'Chemical / Oil Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3759', provider: 'vessel_finder' },
+  { name: 'HAFNIA ADAMITE', imo: '9727546', type: 'petroleiro', typeName: 'Chemical / Oil Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3755', provider: 'vessel_finder' },
+  { name: 'HAFNIA AFRICA', imo: '9467811', type: 'petroleiro', typeName: 'LR1 Product Tanker', flag: 'Marshall Islands', grossTonnage: 42010, dwt: 74500, loa: 228, beam: 32.2, callSign: 'V7WT6', provider: 'vessel_finder' },
+  { name: 'HAFNIA ALABASTER', imo: '9727572', type: 'quimico', typeName: 'Chemical / Oil Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3758', provider: 'vessel_finder' },
+  { name: 'HAFNIA ALMANDINE', imo: '9714068', type: 'quimico', typeName: 'Chemical / Oil Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3715', provider: 'vessel_finder' },
+  { name: 'HAFNIA AMAZONITE', imo: '9719769', type: 'petroleiro', typeName: 'Chemical / Oil Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3742', provider: 'vessel_finder' },
+  { name: 'HAFNIA AMBER', imo: '9714056', type: 'quimico', typeName: 'Chemical / Oil Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3714', provider: 'vessel_finder' },
+  { name: 'HAFNIA AMESSI', imo: '9719745', type: 'petroleiro', typeName: 'Chemical / Oil Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3740', provider: 'vessel_finder' },
+  { name: 'HAFNIA CASSIOPEIA', imo: '9467823', type: 'petroleiro', typeName: 'LR1 Product Tanker', flag: 'Denmark', grossTonnage: 42010, dwt: 74500, loa: 228, beam: 32.2, callSign: 'OWJE2', provider: 'vessel_finder' },
+  { name: 'HAFNIA KALLIOPE', imo: '9727560', type: 'petroleiro', typeName: 'Product Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3757', provider: 'vessel_finder' },
+  { name: 'HAFNIA LOTUS', imo: '9727558', type: 'petroleiro', typeName: 'Product Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3756', provider: 'vessel_finder' },
+  { name: 'HAFNIA PEACE', imo: '9727534', type: 'petroleiro', typeName: 'Product Tanker', flag: 'Denmark', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: 'OYHH2', provider: 'vessel_finder' },
+  { name: 'HAFNIA TORRES', imo: '9727596', type: 'petroleiro', typeName: 'Product Tanker', flag: 'Malta', grossTonnage: 29800, dwt: 49999, loa: 183, beam: 32.2, callSign: '9HA3760', provider: 'vessel_finder' }
 ];
 
 const searchFallback = (query: string) => {
@@ -173,14 +196,18 @@ function fetchHtmlWithRedirects(initialUrl: string, maxRedirects = 4): Promise<{
       const client = parsedUrl.protocol === 'http:' ? http : https;
       const req = client.get(urlStr, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
           'Accept-Language': 'pt-PT,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
+          'Sec-Ch-Ua': '"Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"Windows"',
           'Sec-Fetch-Dest': 'document',
           'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none'
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
+          'Referer': 'https://www.google.com/'
         },
         timeout: 6000
       }, (res) => {
@@ -502,20 +529,25 @@ const mergeManeuverRecords = (existingList: any[], incomingList: any[]) => {
         ...(primary.milestones || {})
       };
 
+      const finalManeuverType = primary.maneuverType || secondary.maneuverType || 'atracacao';
+      const isDesatracacao = finalManeuverType === 'desatracacao';
+
       map.set(incoming.id, {
         ...secondary,
         ...primary,
         createdAt: earliestCreated,
         updatedAt: latestUpdated,
+        maneuverType: finalManeuverType,
         maneuverDate: primary.maneuverDate || secondary.maneuverDate,
         scheduledTime: primary.scheduledTime || secondary.scheduledTime,
         pilotOnBoardTime: primary.pilotOnBoardTime !== undefined ? primary.pilotOnBoardTime : secondary.pilotOnBoardTime,
         lastLineCastOffTime: primary.lastLineCastOffTime !== undefined ? primary.lastLineCastOffTime : secondary.lastLineCastOffTime,
-        firstLineAshored: primary.firstLineAshored !== undefined ? primary.firstLineAshored : secondary.firstLineAshored,
-        allFastBerthingTime: primary.allFastBerthingTime !== undefined ? primary.allFastBerthingTime : secondary.allFastBerthingTime,
+        firstLineAshored: isDesatracacao ? '' : (primary.firstLineAshored !== undefined ? primary.firstLineAshored : secondary.firstLineAshored),
+        allFastBerthingTime: isDesatracacao ? '' : (primary.allFastBerthingTime !== undefined ? primary.allFastBerthingTime : secondary.allFastBerthingTime),
         pilotDisembarkedTime: primary.pilotDisembarkedTime !== undefined ? primary.pilotDisembarkedTime : secondary.pilotDisembarkedTime,
         unmooringTime: primary.unmooringTime !== undefined ? primary.unmooringTime : secondary.unmooringTime,
-        berthingTime: primary.berthingTime !== undefined ? primary.berthingTime : secondary.berthingTime,
+        berthingTime: isDesatracacao ? '' : (primary.berthingTime !== undefined ? primary.berthingTime : secondary.berthingTime),
+        berthingModel: isDesatracacao ? undefined : (primary.berthingModel !== undefined ? primary.berthingModel : secondary.berthingModel),
         tugsMadeFastTime: primary.tugsMadeFastTime !== undefined ? primary.tugsMadeFastTime : secondary.tugsMadeFastTime,
         tugsDismissedTime: primary.tugsDismissedTime !== undefined ? primary.tugsDismissedTime : secondary.tugsDismissedTime,
         tugTimings: primary.tugTimings || secondary.tugTimings,
@@ -621,6 +653,119 @@ app.all('/api/shared/sync-unified', (req, res) => {
       serverTimestamp: nowIso
     }
   });
+});
+
+// API: Maneuvers CRUD
+app.get('/api/shared/maneuvers', (req, res) => {
+  const current = readJson(maneuversFile, []);
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.json({ success: true, maneuvers: current, timestamp: Date.now() });
+});
+
+app.post('/api/shared/maneuvers', (req, res) => {
+  const body = req.body || {};
+  let current = readJson(maneuversFile, []);
+  const incoming = body.maneuver;
+  if (incoming && incoming.id) {
+    current = mergeManeuverRecords(current, [incoming]);
+    writeJson(maneuversFile, current);
+
+    notifyAllSseClients('MANEUVER_SYNC', {
+      maneuvers: current,
+      maneuver: incoming,
+      timestamp: Date.now()
+    });
+    notifyAllSseClients('UNIFIED_SYNC', {
+      maneuvers: current,
+      alerts: readJson(alertsFile, []),
+      vessels: readJson(vesselsFile, []),
+      pilots: readJson(pilotsFile, []),
+      deletedAlertIds: readJson(deletedAlertsFile, []),
+      timestamp: Date.now()
+    });
+  }
+  res.json({ success: true, maneuver: incoming, maneuvers: current });
+});
+
+app.delete('/api/shared/maneuvers', (req, res) => {
+  const id = (req.query.id as string) || (req.body && req.body.id);
+  if (!id) return res.status(400).json({ success: false, error: 'ID requerido' });
+  let current = readJson(maneuversFile, []);
+  current = current.filter((m: any) => m.id !== id);
+  writeJson(maneuversFile, current);
+
+  notifyAllSseClients('MANEUVER_SYNC', {
+    maneuvers: current,
+    deletedId: id,
+    timestamp: Date.now()
+  });
+  res.json({ success: true, maneuvers: current });
+});
+
+// API: Vessels CRUD
+app.get('/api/shared/vessels', (req, res) => {
+  const current = readJson(vesselsFile, []);
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.json({ success: true, vessels: current, timestamp: Date.now() });
+});
+
+app.post('/api/shared/vessels', (req, res) => {
+  const body = req.body || {};
+  let current = readJson(vesselsFile, []);
+  const incoming = body.vessel;
+  if (incoming) {
+    const vMap = new Map();
+    current.forEach((v: any) => {
+      const key = v.imo ? `IMO_${v.imo.trim()}` : (v.id || v.name);
+      if (key) vMap.set(key, v);
+    });
+    const inKey = incoming.imo ? `IMO_${incoming.imo.trim()}` : (incoming.id || incoming.name);
+    if (inKey) {
+      vMap.set(inKey, { ...(vMap.get(inKey) || {}), ...incoming });
+    }
+    current = Array.from(vMap.values());
+    writeJson(vesselsFile, current);
+
+    notifyAllSseClients('UNIFIED_SYNC', {
+      vessels: current,
+      maneuvers: readJson(maneuversFile, []),
+      alerts: readJson(alertsFile, []),
+      pilots: readJson(pilotsFile, []),
+      deletedAlertIds: readJson(deletedAlertsFile, []),
+      timestamp: Date.now()
+    });
+  }
+  res.json({ success: true, vessels: current });
+});
+
+// API: Pilots CRUD
+app.get('/api/shared/pilots', (req, res) => {
+  const current = readJson(pilotsFile, []);
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.json({ success: true, pilots: current, timestamp: Date.now() });
+});
+
+app.post('/api/shared/pilots', (req, res) => {
+  const body = req.body || {};
+  let current = readJson(pilotsFile, []);
+  const incoming = body.pilot;
+  if (incoming && incoming.id) {
+    const pMap = new Map();
+    current.forEach((p: any) => { if (p && p.id) pMap.set(p.id, p); });
+    pMap.set(incoming.id, { ...(pMap.get(incoming.id) || {}), ...incoming });
+    current = Array.from(pMap.values());
+    writeJson(pilotsFile, current);
+
+    notifyAllSseClients('UNIFIED_SYNC', {
+      pilots: current,
+      vessels: readJson(vesselsFile, []),
+      maneuvers: readJson(maneuversFile, []),
+      alerts: readJson(alertsFile, []),
+      deletedAlertIds: readJson(deletedAlertsFile, []),
+      timestamp: Date.now()
+    });
+  }
+  res.json({ success: true, pilots: current });
 });
 
 // API: Verificação de Versões Disponíveis do Software (Silenciosa)
@@ -796,14 +941,17 @@ app.get(['/api/version', '/api/system/version'], (req, res) => {
 
 // Vite or Static assets serving
 async function start() {
-  if (process.env.NODE_ENV !== 'production') {
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+  const isProduction = process.env.NODE_ENV === 'production' || (hasDist && process.env.NODE_ENV !== 'development');
+
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -811,7 +959,7 @@ async function start() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Porto de Praticagem Server running at http://0.0.0.0:${PORT}`);
+    console.log(`Porto de Praticagem Server running on port ${PORT} (${isProduction ? 'Production' : 'Development'})`);
   });
 }
 

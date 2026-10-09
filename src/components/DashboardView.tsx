@@ -336,7 +336,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono text-slate-700">
                   <div>
                     <span className="text-[9px] text-slate-500 block">TIPO / LOCAL</span>
-                    <span className="font-bold">{formatManeuverType(m.type)} &bull; Berço {m.berthNumber}</span>
+                    <span className="font-bold">{formatManeuverType(m.maneuverType)} &bull; {m.berthTo}</span>
                   </div>
                   <div>
                     <span className="text-[9px] text-slate-500 block">PILOTO</span>

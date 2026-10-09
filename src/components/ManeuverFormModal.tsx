@@ -424,7 +424,7 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
     // 1. Busca imediata na base local (navios cadastrados e manobras gravadas)
     const localMatches = searchVesselsWithSuggestions(q, vessels, maneuvers);
     setSuggestions(localMatches);
-    setIsDropdownOpen(localMatches.length > 0);
+    setIsDropdownOpen(true);
 
     // 2. Consulta em segundo plano ao VesselFinder via backend proxy
     if (onlineSearchTimeoutRef.current) clearTimeout(onlineSearchTimeoutRef.current);
@@ -453,7 +453,7 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
         } finally {
           setIsSearchingOnline(false);
         }
-      }, 250);
+      }, 150);
     }
   };
 
@@ -523,13 +523,17 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
 
   // Close dropdown on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: Event) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setIsDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   // Handle Photo Upload (Convert into base64 & prepare automatic PDF attachment)
@@ -1009,18 +1013,33 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
                   value={shipName}
                   onChange={(e) => handleShipNameChange(e.target.value)}
                   onFocus={() => {
-                    if (suggestions.length > 0) setIsDropdownOpen(true);
+                    if (shipName.trim().length >= 2) {
+                      runUnifiedVesselSearch(shipName);
+                    } else if (suggestions.length > 0) {
+                      setIsDropdownOpen(true);
+                    }
                   }}
-                  placeholder="Digite o nome do navio ou IMO (ex: MSC ANNA VICTORIA, EVER GIVEN...)"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      runUnifiedVesselSearch(shipName);
+                    }
+                  }}
+                  placeholder="Digite o nome do navio ou IMO (ex: HAFNIA, MSC ANNA, EVER GIVEN...)"
                   className="w-full bg-white border-2 border-black rounded-md px-3 py-2 text-xs sm:text-sm font-bold text-black placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800 focus:border-blue-800 uppercase pr-10"
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
+                <button
+                  type="button"
+                  onClick={() => runUnifiedVesselSearch(shipName)}
+                  title="Pesquisar características do navio agora"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-blue-900 transition-colors"
+                >
                   {isSearchingOnline ? (
-                    <span className="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
+                    <span className="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin block"></span>
                   ) : (
-                    <Search className="w-4 h-4 text-slate-400" />
+                    <Search className="w-4 h-4" />
                   )}
-                </div>
+                </button>
               </div>
 
               {/* Feedback badge if auto-filled */}
@@ -1045,34 +1064,55 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
               )}
 
               {/* Suggestions Dropdown (Local + Online) */}
-              {isDropdownOpen && suggestions.length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-black rounded-lg shadow-xl z-30 max-h-64 overflow-y-auto divide-y divide-slate-100">
-                  <div className="px-3 py-1.5 bg-blue-950 text-white text-[10px] font-bold uppercase tracking-wider flex justify-between">
-                    <span>Sugestões ({suggestions.length})</span>
-                    <span>Clique para selecionar</span>
+              {isDropdownOpen && (suggestions.length > 0 || isSearchingOnline) && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-black rounded-lg shadow-2xl z-50 max-h-72 overflow-y-auto divide-y divide-slate-100">
+                  <div className="px-3 py-1.5 bg-blue-950 text-white text-[10px] font-bold uppercase tracking-wider flex justify-between items-center">
+                    <span>Sugestões Automáticas ({suggestions.length})</span>
+                    {isSearchingOnline ? (
+                      <span className="flex items-center gap-1 text-blue-300">
+                        <span className="w-2.5 h-2.5 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></span>
+                        A buscar online...
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">Toque para preencher</span>
+                    )}
                   </div>
+
+                  {isSearchingOnline && suggestions.length === 0 && (
+                    <div className="px-4 py-3 flex items-center gap-2.5 text-xs text-blue-900 bg-blue-50 font-semibold">
+                      <span className="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
+                      <span>A pesquisar dados reais de "{shipName.trim()}" no registo marítimo mundial...</span>
+                    </div>
+                  )}
+
                   {suggestions.map((item, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => applyVesselData(item)}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2"
+                      className="w-full text-left px-3 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 border-b border-slate-100 last:border-b-0 cursor-pointer"
                     >
                       <div>
-                        <div className="font-bold text-xs sm:text-sm text-black flex items-center gap-2">
+                        <div className="font-black text-xs sm:text-sm text-black flex items-center gap-2">
                           <span>{item.vessel.name}</span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 bg-slate-100 border border-slate-300 rounded text-slate-700">
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 bg-slate-100 border border-slate-300 rounded text-slate-800 font-bold">
                             IMO {item.vessel.imo}
                           </span>
                         </div>
                         <div className="text-[11px] text-slate-600 flex items-center gap-2 mt-0.5 flex-wrap">
-                          <span>Bandeira: <strong>{item.vessel.flag}</strong></span>
+                          <span>Bandeira: <strong className="text-slate-900">{item.vessel.flag}</strong></span>
                           <span>·</span>
-                          <span>LOA: <strong>{item.vessel.loa}m</strong></span>
+                          <span>LOA: <strong className="text-slate-900">{item.vessel.loa}m</strong></span>
                           <span>·</span>
-                          <span>Boca: <strong>{item.vessel.beam}m</strong></span>
+                          <span>Boca: <strong className="text-slate-900">{item.vessel.beam}m</strong></span>
                           <span>·</span>
-                          <span>GRT: <strong>{item.vessel.grossTonnage.toLocaleString()}</strong></span>
+                          <span>GRT: <strong className="text-slate-900">{item.vessel.grossTonnage.toLocaleString()}</strong></span>
+                          {item.vessel.maxDraft > 0 && (
+                            <>
+                              <span>·</span>
+                              <span>Calado: <strong className="text-slate-900">{item.vessel.maxDraft}m</strong></span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap ${item.sourceBadgeColor}`}>

@@ -314,27 +314,73 @@ export const OperationsView: React.FC<OperationsViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Coluna 3: Horários Operacionais (Primeiro Cabo, Desatracação, Atracação, Rebocadores) */}
+                  {/* Coluna 3: Horários Operacionais conforme Tipo de Manobra */}
                   <div className="text-xs space-y-1 bg-blue-50/70 p-2.5 rounded border border-blue-200">
                     <div className="grid grid-cols-3 gap-1 text-center font-mono">
-                      <div>
-                        <span className="text-[10px] text-slate-500 block font-sans font-bold">DESATRAC.</span>
-                        <span className="font-bold text-black text-xs">
-                          {m.unmooringTime || m.lastLineCastOffTime || m.milestones?.lastLineCastOff || m.milestones?.commenceManeuver || '--:--'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block font-sans font-bold">1º CABO</span>
-                        <span className="font-bold text-black text-xs">
-                          {m.firstLineAshored || m.milestones?.firstLineAshored || '--:--'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block font-sans font-bold">ATRAC.</span>
-                        <span className="font-bold text-black text-xs">
-                          {m.allFastBerthingTime || m.berthingTime || m.milestones?.allFastCompleted || '--:--'}
-                        </span>
-                      </div>
+                      {m.maneuverType === 'desatracacao' ? (
+                        <>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block font-sans font-bold">POB (EMB.)</span>
+                            <span className="font-bold text-black text-xs">
+                              {m.pilotOnBoardTime || m.milestones?.pilotOnBoard || '--:--'}
+                            </span>
+                          </div>
+                          <div className="bg-amber-100/60 rounded py-0.5">
+                            <span className="text-[10px] text-amber-900 block font-sans font-bold">DESATRAC.</span>
+                            <span className="font-bold text-amber-950 text-xs">
+                              {m.unmooringTime || m.lastLineCastOffTime || m.milestones?.lastLineCastOff || m.milestones?.commenceManeuver || '--:--'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block font-sans font-bold">DESEMB.</span>
+                            <span className="font-bold text-black text-xs">
+                              {m.pilotDisembarkedTime || m.milestones?.pilotDisembarked || '--:--'}
+                            </span>
+                          </div>
+                        </>
+                      ) : m.maneuverType === 'atracacao' ? (
+                        <>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block font-sans font-bold">POB</span>
+                            <span className="font-bold text-black text-xs">
+                              {m.pilotOnBoardTime || m.milestones?.pilotOnBoard || '--:--'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block font-sans font-bold">1º CABO</span>
+                            <span className="font-bold text-black text-xs">
+                              {m.firstLineAshored || m.milestones?.firstLineAshored || '--:--'}
+                            </span>
+                          </div>
+                          <div className="bg-blue-100/60 rounded py-0.5">
+                            <span className="text-[10px] text-blue-900 block font-sans font-bold">ATRAC.</span>
+                            <span className="font-bold text-blue-950 text-xs">
+                              {m.allFastBerthingTime || m.berthingTime || m.milestones?.allFastCompleted || '--:--'}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block font-sans font-bold">LARGADA</span>
+                            <span className="font-bold text-black text-xs">
+                              {m.unmooringTime || m.lastLineCastOffTime || m.milestones?.lastLineCastOff || m.milestones?.commenceManeuver || '--:--'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block font-sans font-bold">1º CABO</span>
+                            <span className="font-bold text-black text-xs">
+                              {m.firstLineAshored || m.milestones?.firstLineAshored || '--:--'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block font-sans font-bold">ATRAC.</span>
+                            <span className="font-bold text-black text-xs">
+                              {m.allFastBerthingTime || m.berthingTime || m.milestones?.allFastCompleted || '--:--'}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <div className="pt-1.5 border-t border-blue-200 flex items-center justify-between text-[11px]">
