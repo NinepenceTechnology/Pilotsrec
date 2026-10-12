@@ -1,8 +1,8 @@
 // Sistema de Verificação e Atualização Forçada de Versão
 // Suporte total a Netlify (pilotsrec.netlify.app), PWA e Web Container
 
-export const APP_CURRENT_VERSION = '4.0.0';
-export const APP_BUILD_ID = '2026.09.20.400';
+export const APP_CURRENT_VERSION = '4.1.2';
+export const APP_BUILD_ID = '2026.10.12.412';
 
 interface RemoteVersionInfo {
   version: string;

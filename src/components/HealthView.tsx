@@ -19,7 +19,12 @@ import {
   ChevronRight,
   TrendingDown,
   TrendingUp,
-  Sliders
+  Sliders,
+  Search,
+  List,
+  LayoutGrid,
+  Check,
+  Eye
 } from 'lucide-react';
 import { useMaritime } from '../context/MaritimeContext';
 import { Pilot, ManeuverRecord } from '../types/maritime';
@@ -56,6 +61,11 @@ export const HealthView: React.FC = () => {
   const [alcoholConfirmed, setAlcoholConfirmed] = useState<boolean>(true);
   const [pilotNotes, setPilotNotes] = useState<string>('');
   const [justCertified, setJustCertified] = useState<boolean>(false);
+
+  // Table view controls for fatigue and working time overview
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [tableFilter, setTableFilter] = useState<'all' | 'em_manobra' | 'disponivel' | 'atencao'>('all');
+  const [pilotSearchTerm, setPilotSearchTerm] = useState<string>('');
 
   // Local storage persistence for fitness certification records
   const [history, setHistory] = useState<PilotFitnessRecord[]>(() => {
@@ -193,10 +203,30 @@ export const HealthView: React.FC = () => {
       fatigue += (maneuvers7d.length - 6) * 3.5;
     }
 
+    // Calcular horas de passadiço acumuladas nos últimos 7 dias
+    let bridgeHours7d = 0;
+    maneuvers7d.forEach(m => {
+      if (typeof m.pilotDutyHours === 'number' && m.pilotDutyHours > 0) {
+        bridgeHours7d += m.pilotDutyHours;
+      } else if (m.pilotOnBoardTime && m.pilotDisembarkedTime) {
+        const [sh, sm] = m.pilotOnBoardTime.split(':').map(Number);
+        const [eh, em] = m.pilotDisembarkedTime.split(':').map(Number);
+        let diffHours = (eh * 60 + em - (sh * 60 + sm)) / 60;
+        if (diffHours < 0) diffHours += 24;
+        bridgeHours7d += diffHours;
+      } else if (m.durationMinutes) {
+        bridgeHours7d += m.durationMinutes / 60;
+      } else {
+        bridgeHours7d += 2.0;
+      }
+    });
+
     // 5. Se estiver em manobra ativa agora, adiciona carga cognitiva imediata
     if (activeManeuvers.length > 0) {
       fatigue += 18;
     }
+
+    const activeShip = activeManeuvers[0] ? (activeManeuvers[0].vesselName || activeManeuvers[0].vesselSnapshot?.name || 'Navio em Manobra') : null;
 
     // 6. Crédito de repouso decorrido desde o último desembarque
     const restRecovery = Math.min(45, hoursSinceLastManeuver * 4);
@@ -245,6 +275,8 @@ export const HealthView: React.FC = () => {
       nightManeuvers24h: nightManeuvers24h.length,
       activeManeuversCount: activeManeuvers.length,
       bridgeHours24h: Math.round(bridgeHours24h * 10) / 10,
+      bridgeHours7d: Math.round(bridgeHours7d * 10) / 10,
+      activeShip,
       hoursSinceLastManeuver,
       lastManeuver,
       fatigueScore,
@@ -260,6 +292,22 @@ export const HealthView: React.FC = () => {
   const fleetFatigueData = useMemo(() => {
     return pilots.map(p => computeWorkloadAndFatigue(p));
   }, [pilots, maneuvers]);
+
+  // Filtered fleet list for comprehensive table
+  const filteredFleetData = useMemo(() => {
+    return fleetFatigueData.filter(item => {
+      if (tableFilter === 'em_manobra' && item.activeManeuversCount === 0) return false;
+      if (tableFilter === 'disponivel' && (item.activeManeuversCount > 0 || item.fatigueScore > 50)) return false;
+      if (tableFilter === 'atencao' && item.fatigueScore <= 50) return false;
+      if (pilotSearchTerm.trim()) {
+        const q = pilotSearchTerm.toLowerCase();
+        return item.pilot.name.toLowerCase().includes(q) || 
+               item.pilot.category.toLowerCase().includes(q) || 
+               (item.pilot.licenseNumber && item.pilot.licenseNumber.toLowerCase().includes(q));
+      }
+      return true;
+    });
+  }, [fleetFatigueData, tableFilter, pilotSearchTerm]);
 
   // Current selected pilot fatigue data with current interactive sleep values
   const activeFatigueData = useMemo(() => {
@@ -350,128 +398,442 @@ export const HealthView: React.FC = () => {
         </div>
       </div>
 
-      {/* 1. Fleet Fatigue Risk Matrix (All Pilots Overview) */}
+      {/* 1. Fleet Fatigue Risk Matrix & Work Hours Overview */}
       <div className="bg-white border-2 border-slate-300 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <div>
-            <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded bg-blue-900 text-white font-mono text-[10px] font-black uppercase">
+                FRMS V4.1.2
+              </span>
+              <span className="text-xs font-mono text-blue-900 font-bold">
+                IMO MSC/CIRC.1598 &amp; STCW SECTION A-VIII/1
+              </span>
+            </div>
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2 mt-1">
               <Activity className="w-5 h-5 text-blue-900" />
-              <span>{isPt ? 'Matriz de Gestão de Fadiga da Frota de Pilotos' : 'Pilot Fleet Workload & Fatigue Matrix'}</span>
+              <span>{isPt ? 'Quadro de Gestão de Fadiga e Tempos de Trabalho dos Usuários / Práticos' : 'Pilot Workload, Fatigue & Work Hours Management Table'}</span>
             </h2>
             <p className="text-xs text-slate-500">
               {isPt 
-                ? 'Monitorização comparativa de todos os pilotos para escalamento seguro e prevenção de sobrecarga' 
-                : 'Comparative monitoring across all pilots for safe roster dispatch and overload mitigation'}
+                ? 'Listagem em tempo real de todos os pilotos com respetivas horas de passadiço, manobras em 24h/7d, intervalos de repouso e prontidão operacional' 
+                : 'Real-time monitoring across all pilots with bridge duty hours, 24h/7d maneuvers, rest intervals and STCW operational readiness'}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-[11px] font-mono font-bold">
-            <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              0-28% {isPt ? 'Ótimo' : 'Optimal'}
-            </span>
-            <span className="px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-              29-50% {isPt ? 'Moderado' : 'Moderate'}
-            </span>
-            <span className="px-2 py-1 rounded bg-rose-50 text-rose-800 border border-rose-300 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-              &gt;50% {isPt ? 'Atenção' : 'Caution'}
-            </span>
+          {/* View Mode Toggle: Tabela vs Cartões */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-300 shrink-0 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-blue-900 text-white shadow-xs'
+                  : 'text-slate-700 hover:text-black hover:bg-slate-200'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>{isPt ? 'Tabela de Tempos' : 'Table View'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'cards'
+                  ? 'bg-blue-900 text-white shadow-xs'
+                  : 'text-slate-700 hover:text-black hover:bg-slate-200'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>{isPt ? 'Grelha de Cartões' : 'Cards Grid'}</span>
+            </button>
           </div>
         </div>
 
-        {/* Responsive Pilot Cards / Table */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
-          {fleetFatigueData.map(item => {
-            const isSelected = item.pilot.id === selectedPilot.id;
-            return (
-              <div
-                key={item.pilot.id}
-                onClick={() => setSelectedPilotId(item.pilot.id)}
-                className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between relative ${
-                  isSelected 
-                    ? 'border-blue-900 bg-blue-50/50 shadow-md ring-2 ring-blue-500/20' 
-                    : 'border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50'
-                }`}
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div>
-                    <span className="text-xs font-black text-slate-900 block truncate">
-                      {item.pilot.name}
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-500 block">
-                      {item.pilot.licenseNumber} · {item.pilot.category}
+        {/* Fleet KPI Summary Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <span className="text-[10px] font-mono font-bold text-slate-500 uppercase block">
+              {isPt ? 'Total de Práticos' : 'Total Pilots'}
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-xl font-black text-slate-900 font-mono">{fleetFatigueData.length}</span>
+              <span className="text-[10px] text-slate-500">{isPt ? 'cadastrados' : 'rostered'}</span>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <span className="text-[10px] font-mono font-bold text-blue-800 uppercase block">
+              {isPt ? 'Em Manobra Agora' : 'Active Underway'}
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-xl font-black text-blue-900 font-mono">
+                {fleetFatigueData.filter(f => f.activeManeuversCount > 0).length}
+              </span>
+              <span className="text-[10px] text-blue-700">{isPt ? 'no passadiço' : 'on bridge'}</span>
+            </div>
+          </div>
+
+          <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3">
+            <span className="text-[10px] font-mono font-bold text-cyan-800 uppercase block">
+              {isPt ? 'Horas Trabalho (24h)' : 'Workload (24h)'}
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-xl font-black text-cyan-950 font-mono">
+                {fleetFatigueData.reduce((acc, f) => acc + f.bridgeHours24h, 0).toFixed(1)}h
+              </span>
+              <span className="text-[10px] text-cyan-700">{isPt ? 'acumuladas' : 'accumulated'}</span>
+            </div>
+          </div>
+
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+            <span className="text-[10px] font-mono font-bold text-emerald-800 uppercase block">
+              {isPt ? 'Prontidão Ótima' : 'Optimal Ready'}
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-xl font-black text-emerald-900 font-mono">
+                {fleetFatigueData.filter(f => f.fatigueScore <= 28).length}
+              </span>
+              <span className="text-[10px] text-emerald-700">&lt;28% {isPt ? 'fadiga' : 'fatigue'}</span>
+            </div>
+          </div>
+
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 col-span-2 sm:col-span-1">
+            <span className="text-[10px] font-mono font-bold text-rose-800 uppercase block">
+              {isPt ? 'Alerta de Fadiga' : 'Fatigue Alert'}
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-xl font-black text-rose-900 font-mono">
+                {fleetFatigueData.filter(f => f.fatigueScore > 50).length}
+              </span>
+              <span className="text-[10px] text-rose-700">&gt;50% {isPt ? 'repouso exigido' : 'rest required'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Toolbar: Busca rápida e Filtros */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+          <div className="relative flex-1 max-w-md">
+            <input
+              type="text"
+              value={pilotSearchTerm}
+              onChange={(e) => setPilotSearchTerm(e.target.value)}
+              placeholder={isPt ? 'Pesquisar prático por nome, escalão ou licença...' : 'Search pilot by name, rank or license...'}
+              className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900"
+            />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap text-xs">
+            <span className="text-[11px] font-bold text-slate-500 uppercase">{isPt ? 'Filtrar:' : 'Filter:'}</span>
+            <button
+              type="button"
+              onClick={() => setTableFilter('all')}
+              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                tableFilter === 'all'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-300'
+              }`}
+            >
+              {isPt ? 'Todos' : 'All'} ({fleetFatigueData.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('em_manobra')}
+              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                tableFilter === 'em_manobra'
+                  ? 'bg-blue-900 text-white'
+                  : 'bg-white text-blue-900 hover:bg-blue-100 border border-blue-300'
+              }`}
+            >
+              {isPt ? 'Em Manobra' : 'Underway'} ({fleetFatigueData.filter(f => f.activeManeuversCount > 0).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('disponivel')}
+              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                tableFilter === 'disponivel'
+                  ? 'bg-emerald-800 text-white'
+                  : 'bg-white text-emerald-800 hover:bg-emerald-100 border border-emerald-300'
+              }`}
+            >
+              {isPt ? 'Disponíveis' : 'Available'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('atencao')}
+              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                tableFilter === 'atencao'
+                  ? 'bg-rose-800 text-white'
+                  : 'bg-white text-rose-800 hover:bg-rose-100 border border-rose-300'
+              }`}
+            >
+              {isPt ? 'Atenção / Risco' : 'Caution / High'} ({fleetFatigueData.filter(f => f.fatigueScore > 50).length})
+            </button>
+          </div>
+        </div>
+
+        {/* TABELA DE GESTÃO DE FADIGA E TEMPO DE TRABALHO */}
+        {viewMode === 'table' ? (
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-900 text-white text-[11px] font-mono uppercase tracking-wider divide-x divide-slate-800">
+                  <th className="py-2.5 px-3 font-bold">{isPt ? 'Prático / Usuário' : 'Pilot / User'}</th>
+                  <th className="py-2.5 px-3 font-bold">{isPt ? 'Status Operacional' : 'Current Status'}</th>
+                  <th className="py-2.5 px-3 font-bold text-center">{isPt ? 'Trabalho 24h' : 'Work 24h'}</th>
+                  <th className="py-2.5 px-3 font-bold text-center">{isPt ? 'Trabalho 7 Dias' : 'Work 7d'}</th>
+                  <th className="py-2.5 px-3 font-bold text-center">{isPt ? 'Manobras 24h' : 'Maneuvers 24h'}</th>
+                  <th className="py-2.5 px-3 font-bold text-center">{isPt ? 'Repouso Consecutivo' : 'Rest Interval'}</th>
+                  <th className="py-2.5 px-3 font-bold">{isPt ? 'Índice de Fadiga' : 'Fatigue Index'}</th>
+                  <th className="py-2.5 px-3 font-bold">{isPt ? 'Prontidão STCW' : 'STCW Readiness'}</th>
+                  <th className="py-2.5 px-3 font-bold text-right">{isPt ? 'Ação' : 'Action'}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 font-sans">
+                {filteredFleetData.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-8 text-center text-slate-500 font-medium">
+                      {isPt ? 'Nenhum prático encontrado com os filtros aplicados.' : 'No pilots found with the applied filter.'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredFleetData.map(item => {
+                    const isSelected = item.pilot.id === selectedPilot.id;
+                    const isUnderway = item.activeManeuversCount > 0;
+                    return (
+                      <tr 
+                        key={item.pilot.id}
+                        onClick={() => setSelectedPilotId(item.pilot.id)}
+                        className={`transition-colors cursor-pointer hover:bg-blue-50/70 ${
+                          isSelected ? 'bg-blue-50 font-medium' : 'bg-white'
+                        }`}
+                      >
+                        {/* 1. Nome e Licença */}
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                              isUnderway 
+                                ? 'bg-blue-900 text-white ring-2 ring-blue-500' 
+                                : item.fatigueScore > 50
+                                ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                                : 'bg-slate-100 text-slate-800 border border-slate-300'
+                            }`}>
+                              {item.pilot.name.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                <span>{item.pilot.name}</span>
+                                {isSelected && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-700 animate-pulse"></span>
+                                )}
+                              </div>
+                              <div className="text-[10px] font-mono text-slate-500">
+                                {item.pilot.licenseNumber || 'PIL-MZ'} · {item.pilot.category}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 2. Status Operacional */}
+                        <td className="py-3 px-3">
+                          {isUnderway ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-100 text-blue-950 border border-blue-300 text-[10px] font-bold font-mono">
+                              <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
+                              <span>{isPt ? 'EM MANOBRA' : 'UNDERWAY'}:</span>
+                              <strong className="truncate max-w-[110px]">{item.activeShip || 'Navio'}</strong>
+                            </span>
+                          ) : item.fatigueScore > 75 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-950 border border-rose-300 text-[10px] font-bold font-mono">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" />
+                              <span>{isPt ? 'REPOUSO OBRIGATÓRIO' : 'MANDATORY REST'}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-950 border border-emerald-300 text-[10px] font-bold font-mono">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>{isPt ? 'DISPONÍVEL / ESCALA' : 'AVAILABLE'}</span>
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 3. Tempo de Trabalho 24h */}
+                        <td className="py-3 px-3 text-center font-mono">
+                          <strong className="text-slate-900 text-xs block">{item.bridgeHours24h} h</strong>
+                          <span className="text-[10px] text-slate-500">{isPt ? 'no passadiço' : 'on bridge'}</span>
+                        </td>
+
+                        {/* 4. Tempo de Trabalho 7 Dias */}
+                        <td className="py-3 px-3 text-center font-mono">
+                          <strong className="text-slate-900 text-xs block">{item.bridgeHours7d} h</strong>
+                          <span className="text-[10px] text-slate-500">{item.maneuvers7d} {isPt ? 'manobras' : 'maneuvers'}</span>
+                        </td>
+
+                        {/* 5. Manobras Realizadas em 24h */}
+                        <td className="py-3 px-3 text-center font-mono">
+                          <strong className="text-slate-900 text-xs block">{item.maneuvers24h} man</strong>
+                          {item.nightManeuvers24h > 0 ? (
+                            <span className="text-[10px] text-purple-700 font-bold block">
+                              {item.nightManeuvers24h} {isPt ? 'noturna(s)' : 'night'}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 block">{isPt ? '0 noturnas' : '0 night'}</span>
+                          )}
+                        </td>
+
+                        {/* 6. Repouso Consecutivo Decorrido */}
+                        <td className="py-3 px-3 text-center font-mono">
+                          <strong className={`text-xs block ${item.hoursSinceLastManeuver < 6 ? 'text-amber-700 font-black' : 'text-slate-900'}`}>
+                            {item.hoursSinceLastManeuver} h
+                          </strong>
+                          <span className="text-[10px] text-slate-500">{isPt ? 'desde último fim' : 'since last off'}</span>
+                        </td>
+
+                        {/* 7. Índice de Fadiga (%) com barra visual */}
+                        <td className="py-3 px-3">
+                          <div className="w-32">
+                            <div className="flex justify-between text-[10px] font-mono font-black mb-1">
+                              <span className={item.fatigueScore > 50 ? 'text-rose-700' : 'text-slate-700'}>
+                                {item.fatigueScore}%
+                              </span>
+                              <span className="text-slate-400 font-normal">/ 100%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                              <div
+                                className={`h-full transition-all duration-300 ${
+                                  item.fatigueScore > 75
+                                    ? 'bg-rose-600'
+                                    : item.fatigueScore > 50
+                                    ? 'bg-amber-500'
+                                    : item.fatigueScore > 28
+                                    ? 'bg-yellow-500'
+                                    : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${item.fatigueScore}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 8. Classificação STCW */}
+                        <td className="py-3 px-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-black border whitespace-nowrap ${item.colorClass}`}>
+                            {isPt ? item.labelPt : item.labelEn}
+                          </span>
+                        </td>
+
+                        {/* 9. Ação rápida */}
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedPilotId(item.pilot.id);
+                              // Smooth scroll down to individual detail cockpit
+                              const el = document.getElementById('individual-pilot-telemetry-cockpit');
+                              el?.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="px-2.5 py-1 rounded bg-slate-100 hover:bg-blue-900 hover:text-white text-slate-800 text-[11px] font-bold border border-slate-300 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>{isPt ? 'Detalhe' : 'View'}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* Grelha de Cartões Responsivos */
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+            {filteredFleetData.map(item => {
+              const isSelected = item.pilot.id === selectedPilot.id;
+              return (
+                <div
+                  key={item.pilot.id}
+                  onClick={() => setSelectedPilotId(item.pilot.id)}
+                  className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between relative ${
+                    isSelected 
+                      ? 'border-blue-900 bg-blue-50/50 shadow-md ring-2 ring-blue-500/20' 
+                      : 'border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <span className="text-xs font-black text-slate-900 block truncate">
+                        {item.pilot.name}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500 block">
+                        {item.pilot.licenseNumber} · {item.pilot.category}
+                      </span>
+                    </div>
+
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-black border ${item.colorClass}`}>
+                      {item.fatigueScore}%
                     </span>
                   </div>
 
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-black border ${item.colorClass}`}>
-                    {item.fatigueScore}%
-                  </span>
-                </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2 mb-3 overflow-hidden border border-slate-200">
+                    <div 
+                      className={`h-full transition-all duration-500 ${
+                        item.fatigueScore > 75 
+                          ? 'bg-rose-600' 
+                          : item.fatigueScore > 50 
+                          ? 'bg-amber-500' 
+                          : item.fatigueScore > 28 
+                          ? 'bg-yellow-500' 
+                          : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${item.fatigueScore}%` }}
+                    />
+                  </div>
 
-                {/* Progress bar */}
-                <div className="w-full bg-slate-100 rounded-full h-2 mb-3 overflow-hidden border border-slate-200">
-                  <div 
-                    className={`h-full transition-all duration-500 ${
-                      item.fatigueScore > 75 
-                        ? 'bg-rose-600' 
-                        : item.fatigueScore > 50 
-                        ? 'bg-amber-500' 
-                        : item.fatigueScore > 28 
-                        ? 'bg-yellow-500' 
-                        : 'bg-emerald-500'
-                    }`}
-                    style={{ width: `${item.fatigueScore}%` }}
-                  />
-                </div>
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-mono border-t border-slate-100 pt-2 text-slate-600">
+                    <div>
+                      <span className="text-slate-400 block">{isPt ? 'MANOBRAS 24H' : 'MANEUVERS 24H'}</span>
+                      <strong className="text-slate-900 font-bold text-xs">{item.maneuvers24h} man</strong>
+                      {item.nightManeuvers24h > 0 && (
+                        <span className="text-purple-700 block text-[9px]">({item.nightManeuvers24h} noturnas)</span>
+                      )}
+                    </div>
 
-                {/* Workload Metrics */}
-                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono border-t border-slate-100 pt-2 text-slate-600">
-                  <div>
-                    <span className="text-slate-400 block">{isPt ? 'MANOBRAS 24H' : 'MANEUVERS 24H'}</span>
-                    <strong className="text-slate-900 font-bold text-xs">{item.maneuvers24h} man</strong>
-                    {item.nightManeuvers24h > 0 && (
-                      <span className="text-purple-700 block text-[9px]">({item.nightManeuvers24h} noturnas)</span>
+                    <div>
+                      <span className="text-slate-400 block">{isPt ? 'HORAS PASSADIÇO' : 'BRIDGE HOURS'}</span>
+                      <strong className="text-slate-900 font-bold text-xs">{item.bridgeHours24h} h</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 block">{isPt ? 'REPOUSO PÓS-MAN' : 'REST INTERVAL'}</span>
+                      <strong className="text-slate-900 font-bold text-xs">{item.hoursSinceLastManeuver} h</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 block">{isPt ? 'TOTAL 7 DIAS' : '7-DAY LOAD'}</span>
+                      <strong className="text-slate-900 font-bold text-xs">{item.bridgeHours7d} h</strong>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold">
+                    <span className={item.category === 'baixo' ? 'text-emerald-700' : item.category === 'moderado' ? 'text-amber-700' : 'text-rose-700'}>
+                      {isPt ? item.labelPt : item.labelEn}
+                    </span>
+                    {isSelected && (
+                      <span className="text-blue-900 font-black flex items-center gap-0.5">
+                        {isPt ? 'Selecionado' : 'Selected'} &rarr;
+                      </span>
                     )}
                   </div>
-
-                  <div>
-                    <span className="text-slate-400 block">{isPt ? 'HORAS PASSADIÇO' : 'BRIDGE HOURS'}</span>
-                    <strong className="text-slate-900 font-bold text-xs">{item.bridgeHours24h} h</strong>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-400 block">{isPt ? 'REPOUSO PÓS-MAN' : 'REST INTERVAL'}</span>
-                    <strong className="text-slate-900 font-bold text-xs">{item.hoursSinceLastManeuver} h</strong>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-400 block">{isPt ? 'TOTAL 7 DIAS' : '7-DAY LOAD'}</span>
-                    <strong className="text-slate-900 font-bold text-xs">{item.maneuvers7d} man</strong>
-                  </div>
                 </div>
-
-                {/* Bottom Status */}
-                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold">
-                  <span className={item.category === 'baixo' ? 'text-emerald-700' : item.category === 'moderado' ? 'text-amber-700' : 'text-rose-700'}>
-                    {isPt ? item.labelPt : item.labelEn}
-                  </span>
-                  {isSelected && (
-                    <span className="text-blue-900 font-black flex items-center gap-0.5">
-                      {isPt ? 'Selecionado' : 'Selected'} &rarr;
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 2. Detailed Workload & Biometric Cockpit for Selected Pilot */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div id="individual-pilot-telemetry-cockpit" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Workload Breakdown & Readiness Certification Form */}
         <div className="lg:col-span-2 space-y-6">
           

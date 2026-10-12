@@ -269,7 +269,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewManeuverModal }) => {
             }`}
           >
             <Heart className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-            <span>{isPt ? 'Saúde' : 'Health'}</span>
+            <span>{isPt ? 'Fadiga & Horas' : 'Fatigue & Work'}</span>
           </button>
 
           {/* 3. ALERTA */}

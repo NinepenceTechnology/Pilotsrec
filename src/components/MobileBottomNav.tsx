@@ -74,7 +74,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ onOpenNewManeu
         title="Saúde & Prontidão do Piloto"
       >
         <Heart className={`w-5 h-5 ${currentView === 'saude' ? 'stroke-[2.5]' : ''}`} />
-        <span className="text-[9px] mt-0.5 tracking-tight font-mono">{isPt ? 'Saúde' : 'Health'}</span>
+        <span className="text-[9px] mt-0.5 tracking-tight font-mono">{isPt ? 'Fadiga' : 'Fatigue'}</span>
       </button>
 
       {/* 5. Alertas ou Arquivo */}

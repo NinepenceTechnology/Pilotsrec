@@ -174,24 +174,28 @@ const AppContent: React.FC = () => {
       </AnimatePresence>
 
       {/* New / Edit Maneuver Modal */}
-      <ManeuverFormModal
-        isOpen={isNewManeuverModalOpen}
-        onClose={() => {
-          setIsNewManeuverModalOpen(false);
-          setSelectedVesselForManeuver(null);
-          setEditingManeuver(null);
-        }}
-        initialVessel={selectedVesselForManeuver}
-        editManeuver={editingManeuver}
-      />
+      {isNewManeuverModalOpen && (
+        <ManeuverFormModal
+          isOpen={isNewManeuverModalOpen}
+          onClose={() => {
+            setIsNewManeuverModalOpen(false);
+            setSelectedVesselForManeuver(null);
+            setEditingManeuver(null);
+          }}
+          initialVessel={selectedVesselForManeuver}
+          editManeuver={editingManeuver}
+        />
+      )}
 
       {/* Maneuver Details Modal */}
-      <ManeuverDetailModal
-        maneuverId={detailManeuverId}
-        onClose={() => setDetailManeuverId(null)}
-        onOpenCertificate={handleOpenCertificate}
-        onEditManeuver={handleEditManeuver}
-      />
+      {detailManeuverId && (
+        <ManeuverDetailModal
+          maneuverId={detailManeuverId}
+          onClose={() => setDetailManeuverId(null)}
+          onOpenCertificate={handleOpenCertificate}
+          onEditManeuver={handleEditManeuver}
+        />
+      )}
 
       {/* Pilot Registration & Profile Gate Modal */}
       <PilotRegistrationModal />

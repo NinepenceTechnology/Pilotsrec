@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { 
   Vessel, 
   ManeuverRecord, 
@@ -1095,6 +1095,27 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (data.type === 'CONNECTED') {
               setIsRealtimeConnected(true);
               if (data.clientCount) setActiveSyncDevices(data.clientCount);
+              if (Array.isArray(data.maneuvers) && data.maneuvers.length > 0) {
+                setManeuvers(prev => {
+                  const merged = mergeManeuvers(prev, data.maneuvers);
+                  try { localStorage.setItem(STORAGE_KEYS.MANEUVERS, JSON.stringify(merged)); } catch {}
+                  return merged;
+                });
+              }
+              if (Array.isArray(data.vessels) && data.vessels.length > 0) {
+                setVessels(prev => {
+                  const merged = mergeVessels(prev, data.vessels);
+                  try { localStorage.setItem(STORAGE_KEYS.VESSELS, JSON.stringify(merged)); } catch {}
+                  return merged;
+                });
+              }
+              if (Array.isArray(data.pilots) && data.pilots.length > 0) {
+                setPilots(prev => {
+                  const merged = mergePilots(prev, data.pilots);
+                  try { localStorage.setItem(STORAGE_KEYS.PILOTS, JSON.stringify(merged)); } catch {}
+                  return merged;
+                });
+              }
               if (Array.isArray(data.alerts)) {
                 setAlerts(prev => {
                   const merged = mergeAlerts(prev, data.alerts, deletedAlertIds);
@@ -1193,17 +1214,29 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }
             } else if (data.type === 'MANEUVER_SYNC' && data.payload) {
               if (Array.isArray(data.payload.maneuvers)) {
-                setManeuvers(prev => mergeManeuvers(prev, data.payload.maneuvers));
+                setManeuvers(prev => {
+                  const merged = mergeManeuvers(prev, data.payload.maneuvers);
+                  try { localStorage.setItem(STORAGE_KEYS.MANEUVERS, JSON.stringify(merged)); } catch {}
+                  return merged;
+                });
               }
               triggerUpdatedToast();
             } else if (data.type === 'VESSEL_SYNC' && data.payload) {
               if (Array.isArray(data.payload.vessels)) {
-                setVessels(prev => mergeVessels(prev, data.payload.vessels));
+                setVessels(prev => {
+                  const merged = mergeVessels(prev, data.payload.vessels);
+                  try { localStorage.setItem(STORAGE_KEYS.VESSELS, JSON.stringify(merged)); } catch {}
+                  return merged;
+                });
               }
               triggerUpdatedToast();
             } else if (data.type === 'PILOT_SYNC' && data.payload) {
               if (Array.isArray(data.payload.pilots)) {
-                setPilots(prev => mergePilots(prev, data.payload.pilots));
+                setPilots(prev => {
+                  const merged = mergePilots(prev, data.payload.pilots);
+                  try { localStorage.setItem(STORAGE_KEYS.PILOTS, JSON.stringify(merged)); } catch {}
+                  return merged;
+                });
               }
               triggerUpdatedToast();
             } else if (data.type === 'PING') {
@@ -1241,8 +1274,8 @@ export const MaritimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     syncUnifiedDatabase('push_pull');
     checkForSystemUpdates();
 
-    // Polling ágil e contínuo a cada 20 segundos para manter todos os dispositivos e celulares sempre atualizados
-    const SYNC_INTERVAL_MS = 20 * 1000;
+    // Polling ágil e contínuo a cada 5 segundos para manter todos os dispositivos e usuários sempre atualizados
+    const SYNC_INTERVAL_MS = 5 * 1000;
     const intervalId = setInterval(() => {
       if (typeof navigator === 'undefined' || navigator.onLine) {
         syncUnifiedDatabase('push_pull');

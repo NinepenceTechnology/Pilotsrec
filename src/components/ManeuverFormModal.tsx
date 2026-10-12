@@ -55,8 +55,6 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
 }) => {
   const { vessels, maneuvers, pilots, addManeuver, updateManeuver, addVessel, addPilot, weather, currentUser, language } = useMaritime();
 
-  if (!isOpen) return null;
-
   // Online status detection
   const [isOnline, setIsOnline] = useState<boolean>(
     typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -457,6 +455,45 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
     }
   };
 
+  const scanWebForVessel = async (explicitQuery?: string) => {
+    const q = (explicitQuery || imoNumber || shipName).trim();
+    if (q.length < 2) {
+      setDataSourceNotification({
+        source: 'local',
+        message: 'Por favor digite o Nome do Navio ou Número IMO para escanear.'
+      });
+      return;
+    }
+    setIsSearchingOnline(true);
+    setDataSourceNotification({
+      source: 'online',
+      message: `A escanear VesselFinder e registos marítimos para "${q}"...`
+    });
+    try {
+      const results = await fetchVesselFinderOnline(q);
+      if (results && results.length > 0) {
+        await applyVesselData(results[0]);
+      } else {
+        const local = searchVesselsWithSuggestions(q, vessels, maneuvers);
+        if (local && local.length > 0) {
+          await applyVesselData(local[0]);
+        } else {
+          setDataSourceNotification({
+            source: 'online',
+            message: `Nenhum registo verídico encontrado para "${q}". Verifique o nome ou número IMO.`
+          });
+        }
+      }
+    } catch {
+      setDataSourceNotification({
+        source: 'online',
+        message: 'Erro na ligação ao registo marítimo. Tente novamente.'
+      });
+    } finally {
+      setIsSearchingOnline(false);
+    }
+  };
+
   const handleShipNameChange = (query: string) => {
     setShipName(query);
     setDataSourceNotification(null);
@@ -466,7 +503,10 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
   const handleImoChange = (query: string) => {
     setImoNumber(query);
     setDataSourceNotification(null);
-    if (query.trim().length >= 3) {
+    const cleanDigits = query.replace(/\D/g, '');
+    if (cleanDigits.length === 7) {
+      scanWebForVessel(cleanDigits);
+    } else if (query.trim().length >= 3) {
       runUnifiedVesselSearch(query);
     }
   };
@@ -810,6 +850,8 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto transition-opacity duration-200">
       {/* Container in White, Deep Naval Blue and Black */}
@@ -994,12 +1036,23 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
                 <Ship className="w-4 h-4 text-blue-700" />
                 1. DADOS DO NAVIO & IDENTIFICAÇÃO
               </h3>
-              {isSearchingOnline && (
-                <div className="flex items-center gap-1.5 text-[11px] text-blue-800 font-bold">
-                  <span className="w-3.5 h-3.5 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
-                  <span>A pesquisar no VesselFinder...</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => scanWebForVessel()}
+                  disabled={isSearchingOnline || (!shipName.trim() && !imoNumber.trim())}
+                  className="px-2.5 py-1 rounded bg-blue-900 hover:bg-blue-800 disabled:opacity-40 text-white font-mono font-bold text-[11px] flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95"
+                  title="Escanear automaticamente características reais do navio via VesselFinder usando o Nome ou Número IMO"
+                >
+                  <Globe className="w-3.5 h-3.5 text-cyan-300" />
+                  <span>{isSearchingOnline ? 'A Escanear...' : 'Escanear Web (IMO / Nome)'}</span>
+                </button>
+                {isSearchingOnline && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-blue-800 font-bold">
+                    <span className="w-3.5 h-3.5 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Campo NOME DO NAVIO com autocomplete inteligente */}
@@ -1127,16 +1180,39 @@ export const ManeuverFormModal: React.FC<ManeuverFormModalProps> = ({
             {/* Grid dos dados técnicos do navio: IMO, TIPO, LOA, BEAM, GRT, NACIONALIDADE, CALADOS */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
               <div className="col-span-2">
-                <label className="block text-[11px] font-bold uppercase text-black mb-1">
-                  NÚMERO IMO *
-                </label>
-                <input
-                  type="text"
-                  value={imoNumber}
-                  onChange={(e) => handleImoChange(e.target.value)}
-                  placeholder="___"
-                  className="w-full bg-white border border-black rounded px-2.5 py-1.5 text-xs sm:text-sm font-bold text-black placeholder:text-slate-400 font-mono"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold uppercase text-black">
+                    NÚMERO IMO *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => scanWebForVessel(imoNumber)}
+                    disabled={isSearchingOnline || !imoNumber.trim()}
+                    className="text-[10px] text-blue-900 hover:text-blue-700 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title="Escanear características verídicas deste IMO na web"
+                  >
+                    <Globe className="w-3 h-3 text-blue-700" />
+                    <span>Escanear IMO</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={imoNumber}
+                    onChange={(e) => handleImoChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        scanWebForVessel(imoNumber);
+                      }
+                    }}
+                    placeholder="Ex: 9727534 ou 9356103"
+                    className="w-full bg-white border border-black rounded px-2.5 py-1.5 text-xs sm:text-sm font-bold text-black placeholder:text-slate-400 font-mono pr-8"
+                  />
+                  {isSearchingOnline && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
+                  )}
+                </div>
               </div>
 
               <div>

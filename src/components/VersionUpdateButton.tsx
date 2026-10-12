@@ -74,7 +74,7 @@ export const VersionUpdateButton: React.FC<VersionUpdateButtonProps> = ({ classN
       onClick={handleClick}
       disabled={versionInfo.isChecking}
       className={`flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/80 font-mono font-medium text-[11px] transition-all cursor-pointer active:scale-95 select-none ${className}`}
-      title="Pilot's Records v4.0.0 · Clique para verificar atualizações do software"
+      title="Pilot's Records v4.1.2 · Clique para verificar atualizações do software"
     >
       {feedback === 'Actualizado' ? (
         <>

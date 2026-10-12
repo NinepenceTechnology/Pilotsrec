@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
   X, 
@@ -35,15 +35,20 @@ export const ManeuverDetailModal: React.FC<ManeuverDetailModalProps> = ({
   onEditManeuver
 }) => {
   const { maneuvers, updateManeuver } = useMaritime();
+  const maneuver = maneuverId ? maneuvers.find(m => m.id === maneuverId) : null;
 
-  if (!maneuverId) return null;
-
-  const maneuver = maneuvers.find(m => m.id === maneuverId);
-  if (!maneuver) return null;
-
-  const [remarks, setRemarks] = useState(maneuver.pilotRemarks || '');
+  const [remarks, setRemarks] = useState<string>('');
   const [isEditingRemarks, setIsEditingRemarks] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  useEffect(() => {
+    if (maneuver) {
+      setRemarks(maneuver.pilotRemarks || '');
+      setIsEditingRemarks(false);
+    }
+  }, [maneuverId, maneuver?.pilotRemarks]);
+
+  if (!maneuverId || !maneuver) return null;
 
   // Normalizar anexos existentes ou foto legada
   const currentAttachments: ManeuverAttachment[] = maneuver.attachments && maneuver.attachments.length > 0

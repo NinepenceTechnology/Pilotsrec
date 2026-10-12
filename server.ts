@@ -919,11 +919,17 @@ app.get('/api/shared/events', (req, res) => {
   const initialAlerts = readJson(alertsFile, []);
   const deletedAlertIds = readJson(deletedAlertsFile, []);
   const activeAlerts = initialAlerts.filter((a: any) => !deletedAlertIds.includes(a.id));
+  const currentManeuvers = readJson(maneuversFile, []);
+  const currentVessels = readJson(vesselsFile, []);
+  const currentPilots = readJson(pilotsFile, []);
 
   res.write(`data: ${JSON.stringify({
     type: 'CONNECTED',
     clientId,
     alerts: activeAlerts,
+    maneuvers: currentManeuvers,
+    vessels: currentVessels,
+    pilots: currentPilots,
     clientCount: sseClients.length,
     timestamp: Date.now()
   })}\n\n`);
@@ -936,7 +942,7 @@ app.get('/api/shared/events', (req, res) => {
 
 app.get(['/api/version', '/api/system/version'], (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.json({ version: '4.0.0', forceUpdate: false, timestamp: Date.now() });
+  res.json({ version: '4.1.2', forceUpdate: false, timestamp: Date.now() });
 });
 
 // Vite or Static assets serving

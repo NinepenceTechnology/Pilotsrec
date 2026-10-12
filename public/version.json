@@ -1,10 +1,10 @@
 {
-  "version": "4.0.0",
-  "build": "2026.09.20.400",
-  "releaseDate": "2026-09-20",
-  "timestamp": 1790000000000,
+  "version": "4.1.2",
+  "build": "2026.10.12.412",
+  "releaseDate": "2026-10-12",
+  "timestamp": 1791800000000,
   "forceUpdate": false,
   "forceDomains": [],
   "appName": "Pilot's Records",
-  "notes": "Pilot's Records v4.0.0 estável"
+  "notes": "Pilot's Records v4.1.2: Sincronização multi-usuário unificada, busca verídica IMO/Nome e Gestão de Fadiga aprimorada"
 }
