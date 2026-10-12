@@ -46,7 +46,7 @@ interface PilotFitnessRecord {
 }
 
 export const HealthView: React.FC = () => {
-  const { pilots, activePilotId, maneuvers, language } = useMaritime();
+  const { pilots, activePilotId, maneuvers, language, currentUser } = useMaritime();
   const isPt = language === 'pt';
 
   // Selected pilot for individual workload & fatigue analysis
@@ -96,9 +96,54 @@ export const HealthView: React.FC = () => {
     localStorage.setItem('pilots_records_health_logs', JSON.stringify(history));
   }, [history]);
 
+  // Comprehensive Unified Pilots List (combining database pilots, currentUser and any pilots in maneuvers)
+  const allPilotsList: Pilot[] = useMemo(() => {
+    const list = [...pilots];
+    const existingNames = new Set(list.map(p => p.name.trim().toLowerCase()));
+    const existingIds = new Set(list.map(p => p.id));
+
+    if (currentUser && !existingNames.has(currentUser.name.trim().toLowerCase()) && !existingIds.has(currentUser.id)) {
+      list.unshift({
+        id: currentUser.id,
+        name: currentUser.name,
+        licenseNumber: currentUser.licenseNumber || 'PIL-REG',
+        category: currentUser.rank || 'Piloto de Barra',
+        phone: currentUser.phone || '',
+        vhfCallSign: currentUser.vhfCallSign || `Prático ${currentUser.name}`,
+        status: 'de_servico',
+        currentShift: 'Escala Normal',
+        completedManeuversCount: 0,
+        avatarColor: 'bg-blue-900'
+      });
+      existingNames.add(currentUser.name.trim().toLowerCase());
+      existingIds.add(currentUser.id);
+    }
+
+    maneuvers.forEach(m => {
+      const pName = m.pilotName?.trim();
+      if (pName && !existingNames.has(pName.toLowerCase())) {
+        list.push({
+          id: m.pilotId || `pilot-auto-${list.length + 1}`,
+          name: pName,
+          licenseNumber: 'PIL-MZ',
+          category: 'Piloto Prático',
+          phone: '',
+          vhfCallSign: `Prático ${pName}`,
+          status: 'de_servico',
+          currentShift: 'Escala do Porto',
+          completedManeuversCount: 0,
+          avatarColor: 'bg-slate-800'
+        });
+        existingNames.add(pName.toLowerCase());
+      }
+    });
+
+    return list;
+  }, [pilots, currentUser, maneuvers]);
+
   // Selected Pilot Object
   const selectedPilot: Pilot = useMemo(() => {
-    return pilots.find(p => p.id === selectedPilotId) || pilots[0] || {
+    return allPilotsList.find(p => p.id === selectedPilotId) || allPilotsList[0] || {
       id: 'pilot-1',
       name: 'Comte. Silva',
       licenseNumber: 'PIL-MZ-041',
@@ -107,7 +152,7 @@ export const HealthView: React.FC = () => {
       experienceYears: 18,
       totalManeuvers: 1420
     };
-  }, [pilots, selectedPilotId]);
+  }, [allPilotsList, selectedPilotId]);
 
   // Workload calculation engine for ANY pilot based on maneuver history
   const computeWorkloadAndFatigue = (pilot: Pilot, customSleepHours?: number, customRestHours?: number) => {
@@ -290,8 +335,8 @@ export const HealthView: React.FC = () => {
 
   // Compute workload & fatigue for all pilots in team
   const fleetFatigueData = useMemo(() => {
-    return pilots.map(p => computeWorkloadAndFatigue(p));
-  }, [pilots, maneuvers]);
+    return allPilotsList.map(p => computeWorkloadAndFatigue(p));
+  }, [allPilotsList, maneuvers]);
 
   // Filtered fleet list for comprehensive table
   const filteredFleetData = useMemo(() => {

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild netlify/functions/vesselfinder.ts --bundle --platform=node --format=cjs --outfile=netlify/functions/vesselfinder.js && esbuild netlify/functions/vesselfinder-details.ts --bundle --platform=node --format=cjs --outfile=netlify/functions/vesselfinder-details.js",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild netlify/functions/vesselfinder.ts --bundle --platform=node --format=cjs --outfile=dist/functions/vesselfinder.js && esbuild netlify/functions/vesselfinder-details.ts --bundle --platform=node --format=cjs --outfile=dist/functions/vesselfinder-details.js",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",

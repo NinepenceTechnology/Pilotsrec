@@ -195,13 +195,15 @@ export const handler = async (event: any) => {
     };
   }
 
-  const cleanNum = query.trim().replace(/\D/g, '');
-  const isNumeric7DigitImo = cleanNum.length === 7 && cleanNum === query.trim();
+  const rawQuery = query.trim();
+  const cleanNum = rawQuery.replace(/\D/g, '');
+  const is7DigitImo = cleanNum.length === 7;
+  const cleanSearchTerm = is7DigitImo ? cleanNum : rawQuery.replace(/^(?:IMO\s*[:#-]?\s*|M\/?V\s+|N\/?M\s+)/i, '').trim();
   const rows: any[] = [];
   const seenImos = new Set<string>();
 
   try {
-    if (isNumeric7DigitImo) {
+    if (is7DigitImo) {
       try {
         const directUrl = `https://www.vesselfinder.com/vessels/details/${encodeURIComponent(cleanNum)}`;
         const { html } = await fetchHtmlWithRedirects(directUrl);
@@ -244,8 +246,9 @@ export const handler = async (event: any) => {
       } catch {}
     }
 
-    const targetUrl = `https://www.vesselfinder.com/vessels?name=${encodeURIComponent(query.trim())}`;
-    const { html, finalUrl } = await fetchHtmlWithRedirects(targetUrl);
+    if (rows.length === 0) {
+      const targetUrl = `https://www.vesselfinder.com/vessels?name=${encodeURIComponent(cleanSearchTerm)}`;
+      const { html, finalUrl } = await fetchHtmlWithRedirects(targetUrl);
 
     if ((finalUrl.includes('/vessels/details/') || html.includes('class="ship-section"')) && rows.length === 0) {
       const nameMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
@@ -336,6 +339,7 @@ export const handler = async (event: any) => {
         });
       }
     }
+  }
 
     if (rows.length > 0) {
       return {

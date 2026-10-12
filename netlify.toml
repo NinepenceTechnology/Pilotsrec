@@ -1,7 +1,10 @@
 [build]
   command = "npm run build"
   publish = "dist"
-  functions = "netlify/functions"
+  functions = "dist/functions"
+
+[functions]
+  node_bundler = "esbuild"
 
 [[redirects]]
   from = "/api/vesselfinder"
@@ -20,6 +23,13 @@
 
 [[headers]]
   for = "/api/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+
+[[headers]]
+  for = "/.netlify/functions/*"
   [headers.values]
     Access-Control-Allow-Origin = "*"
     Access-Control-Allow-Headers = "Content-Type"

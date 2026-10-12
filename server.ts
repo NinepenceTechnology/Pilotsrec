@@ -249,14 +249,16 @@ app.get('/api/vesselfinder', async (req, res) => {
     return res.json({ success: true, vessels: [] });
   }
 
-  const cleanNum = query.trim().replace(/\D/g, '');
-  const isNumeric7DigitImo = cleanNum.length === 7 && cleanNum === query.trim();
+  const rawQuery = query.trim();
+  const cleanNum = rawQuery.replace(/\D/g, '');
+  const is7DigitImo = cleanNum.length === 7;
+  const cleanSearchTerm = is7DigitImo ? cleanNum : rawQuery.replace(/^(?:IMO\s*[:#-]?\s*|M\/?V\s+|N\/?M\s+)/i, '').trim();
   const rows: any[] = [];
   const seenImos = new Set<string>();
 
   try {
-    // 1. If user typed exact 7-digit IMO, directly query the specific vessel details page first
-    if (isNumeric7DigitImo) {
+    // 1. Se for IMO de 7 dígitos (puro ou prefixado por 'IMO', 'IMO:'), consultar diretamente a página oficial de detalhes
+    if (is7DigitImo) {
       try {
         const directUrl = `https://www.vesselfinder.com/vessels/details/${encodeURIComponent(cleanNum)}`;
         const { html } = await fetchHtmlWithRedirects(directUrl);
@@ -300,9 +302,10 @@ app.get('/api/vesselfinder', async (req, res) => {
       } catch {}
     }
 
-    // 2. Query VesselFinder standard search URL (accepts names or numbers via ?name=)
-    const targetUrl = `https://www.vesselfinder.com/vessels?name=${encodeURIComponent(query.trim())}`;
-    const { html, finalUrl } = await fetchHtmlWithRedirects(targetUrl);
+    // 2. Se ainda não encontramos ou se é busca por nome, consultar endpoint de pesquisa do VesselFinder
+    if (rows.length === 0) {
+      const targetUrl = `https://www.vesselfinder.com/vessels?name=${encodeURIComponent(cleanSearchTerm)}`;
+      const { html, finalUrl } = await fetchHtmlWithRedirects(targetUrl);
 
     // Se redirecionou direto para uma página de detalhe
     if ((finalUrl.includes('/vessels/details/') || html.includes('class="ship-section"')) && rows.length === 0) {
@@ -395,6 +398,7 @@ app.get('/api/vesselfinder', async (req, res) => {
         });
       }
     }
+  }
 
     // Se encontramos resultados reais da internet, retornamos de imediato
     if (rows.length > 0) {
